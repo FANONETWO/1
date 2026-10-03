@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://kill-removal-test"]
+
+[ext_resource type="Script" path="res://tests/kill_removal_test.gd" id="1_kill"]
+
+[node name="KillRemovalTest" type="Control"]
+script = ExtResource("1_kill")

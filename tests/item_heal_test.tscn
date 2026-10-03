@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://item-heal-test"]
+
+[ext_resource type="Script" path="res://tests/item_heal_test.gd" id="1_heal"]
+
+[node name="ItemHealTest" type="Control"]
+script = ExtResource("1_heal")

@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://bloodline-live-test"]
+
+[ext_resource type="Script" path="res://tests/bloodline_live_test.gd" id="1_live"]
+
+[node name="BloodlineLiveTest" type="Control"]
+script = ExtResource("1_live")

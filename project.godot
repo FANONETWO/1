@@ -1,0 +1,39 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="轮回回廊"
+config/description="无限流 · CRPG 垂直切片（基于 D10 骰池 TRPG 规则）"
+run/main_scene="res://main_menu.tscn"
+config/features=PackedStringArray("4.7")
+
+[autoload]
+
+EventBus="*res://autoload/event_bus.gd"
+Game="*res://autoload/game.gd"
+DebugLog="*res://autoload/debug_log.gd"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/hasturoperationgd/plugin.cfg")
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+; 像素风关键：纹理过滤 = Nearest（0），避免像素被双线性插值糊掉
+textures/canvas_textures/default_texture_filter=0

@@ -1,0 +1,26 @@
+# Godot 4 编辑器缓存与导入产物（不要提交）
+.godot/
+/android/
+
+# 导出产物
+/build/
+/export/
+*.pck
+*.exe
+*.zip
+
+# 系统文件
+Thumbs.db
+.DS_Store
+
+# 浏览器自动化：登录态与密钥（绝不提交）
+.secrets/
+.env.local
+
+# 依赖与 AI 生成原图（原图不入库，处理后的成品才入库）
+node_modules/
+assets/raw/
+*.log
+
+# 本地扫描工具状态
+.mimosa/

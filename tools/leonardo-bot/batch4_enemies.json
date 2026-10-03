@@ -1,0 +1,4 @@
+﻿[
+  {"id":"w1_crawler_idle","aspect":"2:3","count":1,"prompt":"pixel art, 16-bit game sprite, one twisted crawler creature clinging low to the ground with elongated limbs, pale grey skin, full body, top-down three-quarter view, centered, plain flat background, clear silhouette, limited palette, sharp single-pixel detail, no anti-aliasing, no text"},
+  {"id":"w1_brute_idle","aspect":"1:1","count":1,"prompt":"pixel art, 16-bit boss sprite, massive bloated zombie with a half-embedded security door in its chest, hulking silhouette, full body, centered, plain flat background, dark palette with blood red accents, sharp single-pixel detail, no anti-aliasing, no text"}
+]

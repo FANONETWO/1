@@ -1,0 +1,32 @@
+[
+  {
+    "id": "w1_floor",
+    "aspect": "1:1",
+    "count": 2,
+    "prompt": "pixel art, 16-bit game asset, seamless top-down floor tile of a dark abandoned apartment corridor, worn grey concrete, subtle cracks, cold blue-grey palette, flat, minimal detail, sharp single-pixel detail, limited palette, no anti-aliasing, no text"
+  },
+  {
+    "id": "w1_wall",
+    "aspect": "1:1",
+    "count": 2,
+    "prompt": "pixel art, 16-bit game asset, seamless top-down concrete wall tile of an abandoned apartment, peeling paint, cold blue-grey palette, flat, minimal detail, sharp single-pixel detail, limited palette, no anti-aliasing, no text"
+  },
+  {
+    "id": "w1_player_idle",
+    "aspect": "2:3",
+    "count": 3,
+    "prompt": "pixel art, 16-bit game sprite, one lone survivor in a worn jacket holding a steel pipe, standing idle, full body, top-down three-quarter view, centered, plain flat background, clear silhouette, limited palette, sharp single-pixel detail, no anti-aliasing, no text"
+  },
+  {
+    "id": "w1_zombie_idle",
+    "aspect": "2:3",
+    "count": 3,
+    "prompt": "pixel art, 16-bit game sprite, one decaying zombie in tattered apartment clothes, shambling forward, full body, top-down three-quarter view, centered, plain flat background, clear silhouette, limited palette, sharp single-pixel detail, no anti-aliasing, no text"
+  },
+  {
+    "id": "w1_pipe_icon",
+    "aspect": "1:1",
+    "count": 2,
+    "prompt": "pixel art, 16-bit inventory icon, a single steel pipe weapon, centered, clean silhouette, limited 16 colors, sharp single-pixel detail, no anti-aliasing, plain flat background, no text"
+  }
+]

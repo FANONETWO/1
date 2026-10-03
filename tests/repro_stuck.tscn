@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://repro-stuck"]
+
+[ext_resource type="Script" path="res://tests/repro_stuck.gd" id="1_repro"]
+
+[node name="ReproStuck" type="Control"]
+script = ExtResource("1_repro")

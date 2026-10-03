@@ -1,0 +1,8 @@
+﻿[
+  {"id":"w1_door","aspect":"1:1","count":1,"prompt":"pixel art, 16-bit game asset, seamless top-down view of a closed rusted metal apartment door filling the whole frame, flat, cold blue-grey palette, minimal detail, sharp single-pixel detail, limited palette, no anti-aliasing, no text"},
+  {"id":"w1_stairs","aspect":"1:1","count":1,"prompt":"pixel art, 16-bit game asset, seamless top-down view of a concrete stairwell opening filling the whole frame, dark steps descending, cold blue-grey palette, flat, minimal detail, sharp single-pixel detail, limited palette, no anti-aliasing, no text"},
+  {"id":"w1_exit","aspect":"1:1","count":1,"prompt":"pixel art, 16-bit game asset, seamless top-down view of a heavy metal fire exit door filling the whole frame, green emergency light strip, cold blue-grey palette, flat, minimal detail, sharp single-pixel detail, limited palette, no anti-aliasing, no text"},
+  {"id":"w1_table","aspect":"1:1","count":1,"prompt":"pixel art, 16-bit game asset, seamless top-down view of a worn wooden table filling the whole frame, cold blue-grey palette, flat, minimal detail, sharp single-pixel detail, limited palette, no anti-aliasing, no text"},
+  {"id":"w1_cabinet","aspect":"1:1","count":1,"prompt":"pixel art, 16-bit game asset, seamless top-down view of a metal storage cabinet filling the whole frame, cold blue-grey palette, flat, minimal detail, sharp single-pixel detail, limited palette, no anti-aliasing, no text"},
+  {"id":"w1_bed","aspect":"1:1","count":1,"prompt":"pixel art, 16-bit game asset, seamless top-down view of an old bare mattress bed filling the whole frame, cold blue-grey palette, flat, minimal detail, sharp single-pixel detail, limited palette, no anti-aliasing, no text"}
+]

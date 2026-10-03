@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://shot-char-panel"]
+
+[ext_resource type="Script" path="res://tests/shot_character_panel.gd" id="1_cp"]
+
+[node name="ShotCharacterPanel" type="Control"]
+script = ExtResource("1_cp")

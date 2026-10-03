@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://persist-test"]
+
+[ext_resource type="Script" path="res://tests/persist_test.gd" id="1_persist"]
+
+[node name="PersistTest" type="Control"]
+script = ExtResource("1_persist")

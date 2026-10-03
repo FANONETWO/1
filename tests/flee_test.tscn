@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://flee-test"]
+
+[ext_resource type="Script" path="res://tests/flee_test.gd" id="1_flee"]
+
+[node name="FleeTest" type="Control"]
+script = ExtResource("1_flee")

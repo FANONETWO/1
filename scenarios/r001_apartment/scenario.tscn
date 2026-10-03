@@ -1,0 +1,10 @@
+[gd_scene load_steps=2 format=3 uid="uid://r001apartment"]
+
+[ext_resource type="Script" path="res://scenarios/r001_apartment/scenario.gd" id="1_scenario"]
+
+[node name="Scenario" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource("1_scenario")

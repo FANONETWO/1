@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://shot-map-design"]
+
+[ext_resource type="Script" path="res://tests/shot_map_design.gd" id="1_map"]
+
+[node name="ShotMapDesign" type="Node2D"]
+script = ExtResource("1_map")

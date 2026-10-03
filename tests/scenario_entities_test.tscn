@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://scenario-entities-test"]
+
+[ext_resource type="Script" path="res://tests/scenario_entities_test.gd" id="1_ent"]
+
+[node name="ScenarioEntitiesTest" type="Control"]
+script = ExtResource("1_ent")

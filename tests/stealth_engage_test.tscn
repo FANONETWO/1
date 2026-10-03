@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://stealth-engage-test"]
+
+[ext_resource type="Script" path="res://tests/stealth_engage_test.gd" id="1_se"]
+
+[node name="StealthEngageTest" type="Control"]
+script = ExtResource("1_se")
