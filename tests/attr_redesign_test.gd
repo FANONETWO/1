@@ -40,7 +40,7 @@ func _test_derived() -> void:
 	_check(c.max_will() == 2 * 3, "意志 = 2×决心 → %d" % c.max_will())
 	_check(c.crit_rate() == 25, "暴击率 = 5×感知 → %d%%" % c.crit_rate())
 	_check(c.move_range() == 3 + 2, "移动力 = 3+敏捷/2 → %d" % c.move_range())
-	_check(c.tactical_points() == 2, "战术点 = 智力/2 → %d" % c.tactical_points())
+	_check(c.command_points_base() == 2, "指挥点 = 智力/2 → %d" % c.command_points_base())
 	_check(c.aura_range() == 2, "光环半径 = 风度/2 → %d" % c.aura_range())
 	_check(c.aura_hit_bonus() == 2, "光环命中加成（风度≥4）→ +%d" % c.aura_hit_bonus())
 	_check(c.intimidate_penalty() == 2, "威慑（操控≥4）→ −%d 命中" % c.intimidate_penalty())

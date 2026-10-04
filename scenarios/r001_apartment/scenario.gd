@@ -1653,7 +1653,7 @@ func _refresh_hud() -> void:
 		if bool(_enemy_nodes[uid].get("alerted", false)):
 			chased += 1
 	var chase_txt := "" if chased == 0 else "　⚠ %d 个在追你" % chased
-	_hud_pts.text = "积分 %d　噪音 %d　回合 %d%s" % [Game.points, _noise, _turn, chase_txt]
+	_hud_pts.text = "奖励点 %d　噪音 %d　回合 %d%s" % [Game.points, _noise, _turn, chase_txt]
 	var qs: Array[String] = []
 	for qid in _quests.defs:
 		if _quests.is_active(StringName(qid)):

@@ -64,8 +64,8 @@ func crit_rate() -> int:
 func move_range() -> int:
 	return 3 + int(attr("dex") / 2)
 
-## 智力 → 战术点（每场可用次数）：智力/2
-func tactical_points() -> int:
+## 智力 → 指挥点基数（战斗内汇总成全队共享池）：智力/2
+func command_points_base() -> int:
 	return int(attr("int") / 2)
 
 ## 风度 → 指挥光环半径（格）：风度/2
