@@ -169,7 +169,8 @@ func _load_room(room_id: String, entry_cell: Vector2i, from_dir: String = "") ->
 		(_map as PixelGridRenderer).reset_seen()
 	if from_dir != "":
 		AudioManager.play("door")
-	_announce_room(room_id)
+		# 只在真正「换房间」时打大字幕：刚进场那条会和新手引导弹窗叠在一起糊成一团
+		_announce_room(room_id)
 	# 不同房间可能有相同坐标 → 强制重算迷雾，否则会沿用上一间的视野
 	_fog_at = Vector2i(-99, -99)
 	# 关键：刚落地时上锁，否则若出生点恰是出口格会立刻被弹到隔壁
