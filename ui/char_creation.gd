@@ -16,9 +16,11 @@ var _attr_summary: Label
 var _skill_summary: Label
 var _talent_summary: Label
 var _confirm: Button
+var _hint: Label          # 底部状态说明：告诉玩家确认按钮为什么是灰的（E1）
 
 func _ready() -> void:
 	theme = PixelTheme.build()
+	AudioManager.play_bgm("hub")
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	var bg := ColorRect.new()
 	bg.color = Color(0.03, 0.03, 0.06)
@@ -47,10 +49,11 @@ func _ready() -> void:
 	name_row.add_theme_constant_override("separation", 10)
 	add_child(name_row)
 	var name_lb := Label.new()
-	name_lb.text = "代号："
+	name_lb.text = "代号： *"
 	name_row.add_child(name_lb)
 	_name_edit = LineEdit.new()
-	_name_edit.placeholder_text = "输入你的轮回者代号"
+	_name_edit.placeholder_text = "必填 —— 输入你的轮回者代号"
+	_name_edit.tooltip_text = "代号是必填项；没填时下方「确认」按钮不会亮"
 	_name_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_name_edit.text_changed.connect(func(_t): _refresh())
 	name_row.add_child(_name_edit)
@@ -81,12 +84,28 @@ func _ready() -> void:
 	add_child(bottom)
 	var back := Button.new()
 	back.text = "返回"
-	back.pressed.connect(func() -> void: get_tree().change_scene_to_file("res://main_menu.tscn"))
+	back.pressed.connect(func() -> void:
+		AudioManager.play("ui_click")
+		get_tree().change_scene_to_file("res://main_menu.tscn"))
 	bottom.add_child(back)
+	var rec := Button.new()
+	rec.text = "推荐配点"
+	rec.tooltip_text = "一键填入一套「丧尸副本生存向」的属性/技能/天赋，可直接开打"
+	rec.pressed.connect(func() -> void:
+		AudioManager.play("ui_confirm")
+		_apply_recommended())
+	bottom.add_child(rec)
 	_confirm = Button.new()
 	_confirm.text = "确认，进入主神空间"
 	_confirm.pressed.connect(_confirm_create)
 	bottom.add_child(_confirm)
+	_hint = Label.new()
+	_hint.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	_hint.offset_top = -50
+	_hint.offset_bottom = -26
+	_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_hint.add_theme_font_size_override("font_size", 13)
+	add_child(_hint)
 
 	_refresh()
 
@@ -204,7 +223,7 @@ func _build_talent_col() -> Control:
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		b.custom_minimum_size = Vector2(0, 46)
-		b.pressed.connect(_select_talent.bind(String(tid)))
+		b.pressed.connect(_on_talent_pressed.bind(String(tid)))
 		v.add_child(b)
 	return panel
 
@@ -247,6 +266,11 @@ func _skill_change(s: String, delta: int) -> void:
 	_skills[s] = next
 	_refresh()
 
+## 天赋按钮点击（单独一个函数是为了能把 tid 用 bind 传进来，避免 lambda 捕获循环变量的坑）
+func _on_talent_pressed(tid: String) -> void:
+	AudioManager.play("ui_click")
+	_select_talent(tid)
+
 func _select_talent(tid: String) -> void:
 	_talent = tid
 	_refresh()
@@ -257,15 +281,33 @@ func _refresh() -> void:
 	for a in _attr_rows:
 		var row: Dictionary = _attr_rows[a]
 		row["val"].text = str(_attrs[a])
-		row["minus"].disabled = int(_attrs[a]) <= 1
-		row["plus"].disabled = int(_attrs[a]) >= 6 or _attr_cost(int(_attrs[a]), int(_attrs[a]) + 1) > _attr_points_left
+		var v := int(_attrs[a])
+		var step := _attr_cost(v, v + 1)
+		row["minus"].disabled = v <= 1
+		row["plus"].disabled = v >= 6 or step > _attr_points_left
+		# E3：置灰要给出原因，否则玩家只能瞎猜（悬停即可看到）
+		row["minus"].tooltip_text = "已是最低值 1" if v <= 1 else "降 1 级，退还 %d 点" % _attr_cost(v - 1, v)
+		if v >= 6:
+			row["plus"].tooltip_text = "已是人类上限 6"
+		elif step > _attr_points_left:
+			row["plus"].tooltip_text = "点数不够：升到 %d 需要 %d 点，你只剩 %d 点" % [v + 1, step, _attr_points_left]
+		else:
+			row["plus"].tooltip_text = "花 %d 点升到 %d（阶梯价）" % [step, v + 1]
 	_attr_summary.text = "剩余 %d 点%s" % [_attr_points_left,
 		"（已无法再分配，可直接确认）" if (_attr_points_left > 0 and not _has_affordable_attr()) else ""]
 	for s in _skill_rows:
 		var row: Dictionary = _skill_rows[s]
 		row["val"].text = str(_skills[s])
-		row["minus"].disabled = int(_skills[s]) <= 0
-		row["plus"].disabled = int(_skills[s]) >= 5 or _skill_points_left < 1
+		var lv := int(_skills[s])
+		row["minus"].disabled = lv <= 0
+		row["plus"].disabled = lv >= 5 or _skill_points_left < 1
+		row["minus"].tooltip_text = "已是最低 0 级" if lv <= 0 else "降 1 级，退还 1 点"
+		if lv >= 5:
+			row["plus"].tooltip_text = "已是本切片上限 5 级"
+		elif _skill_points_left < 1:
+			row["plus"].tooltip_text = "技能点已用完"
+		else:
+			row["plus"].tooltip_text = "花 1 点升到 %d 级" % (lv + 1)
 	_skill_summary.text = "剩余 %d 点" % _skill_points_left
 	if _talent != "":
 		_talent_summary.text = "已选：%s" % String(Talents.get_def(_talent).get("name", _talent))
@@ -273,7 +315,26 @@ func _refresh() -> void:
 		_talent_summary.text = "未选择"
 	# 属性购点是**阶梯价**（1→2 花 1 点，2→3 花 2 点…），所以可能剩下买不起任何一级的零头。
 	# 旧条件要求「点数必须花到 0」，于是剩 1 点时所有「+」都灰着、确认按钮也灰着 —— 玩家永久卡死。
-	_confirm.disabled = _talent == "" or _has_affordable_attr() or _name_edit.text.strip_edges() == ""
+	# E1：这里把「为什么不能确认」直接写成一句话，玩家不用猜。
+	var blocking: Array[String] = []
+	if _name_edit.text.strip_edges() == "":
+		blocking.append("代号（必填）")
+	if _talent == "":
+		blocking.append("天赋（选一个出身）")
+	if _has_affordable_attr():
+		blocking.append("属性点还能再分配（还剩 %d 点）" % _attr_points_left)
+	if _hint != null:
+		if blocking.is_empty():
+			var tail := ""
+			if _skill_points_left > 0:
+				tail = "　（技能点还剩 %d，可以现在花掉，也可以留到主神空间）" % _skill_points_left
+			_hint.text = "一切就绪 —— 可以「确认，进入主神空间」了。" + tail
+			_hint.modulate = Color(0.62, 1.0, 0.72)
+		else:
+			_hint.text = "还不能确认，请先补完：" + "、".join(blocking)
+			_hint.modulate = Color(1.0, 0.78, 0.42)
+	_confirm.disabled = not blocking.is_empty()
+	_confirm.tooltip_text = "" if blocking.is_empty() else _hint.text
 
 ## 是否还有买得起的属性提升
 func _has_affordable_attr() -> bool:
@@ -284,6 +345,43 @@ func _has_affordable_attr() -> bool:
 		if v < 6 and _attr_cost(v, v + 1) <= _attr_points_left:
 			return true
 	return false
+
+## E2：一键推荐配点 —— 「丧尸副本生存向」，属性恰好花完 30 点、技能恰好花完 20 点
+## （耐力 4 → 生命 24；敏捷 3 → 移动力 4；感知 3 → 暴击 15%；白刃/躲藏/调查 各 3）
+const RECOMMENDED_ATTRS := {
+	"str": 3, "dex": 3, "end": 4, "int": 1, "per": 3,
+	"res": 2, "pre": 2, "man": 1, "com": 2,
+}
+const RECOMMENDED_SKILLS := {
+	"brawl": 1, "blade": 3, "gun": 2, "hide": 3, "survive": 2,
+	"investigate": 3, "medicine": 2, "empathy": 2, "socialize": 1, "intimidate": 1,
+}
+const RECOMMENDED_TALENT := "survivor"
+
+func _attrs_cost_total() -> int:
+	var total := 0
+	for a in _attrs:
+		total += _attr_cost(1, int(_attrs[a]))
+	return total
+
+func _skills_total() -> int:
+	var total := 0
+	for s in _skills:
+		total += int(_skills[s])
+	return total
+
+func _apply_recommended() -> void:
+	for a in Attrs.ALL:
+		_attrs[a] = int(RECOMMENDED_ATTRS.get(a, 1))
+	_attr_points_left = ATTR_POOL - _attrs_cost_total()
+	for s in Skills.ALL:
+		_skills[s] = int(RECOMMENDED_SKILLS.get(s, 0))
+	_skill_points_left = SKILL_POOL - _skills_total()
+	if _talent == "":
+		_talent = RECOMMENDED_TALENT
+	if _name_edit.text.strip_edges() == "":
+		_name_edit.text = "幸存者"
+	_refresh()
 
 func _confirm_create() -> void:
 	var c := Character.create_default()

@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://ux-test"]
+
+[ext_resource type="Script" path="res://tests/ux_test.gd" id="1_ux"]
+
+[node name="UxTest" type="Control"]
+script = ExtResource("1_ux")

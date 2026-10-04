@@ -7,6 +7,7 @@ extends Control
 ## 所以这里专门校验：每个实体节点的实际坐标是否等于它所在格子的世界坐标。
 
 func _ready() -> void:
+	TestGuard.arm("scenario_entities_test", 45, get_tree())
 	var p := Character.create_default()
 	p.name = "定位测试"
 	p.talent_id = "fighter"

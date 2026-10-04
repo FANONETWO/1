@@ -3,6 +3,7 @@ extends Control
 ##   godot --path . res://tests/noise_test.tscn --quit-after 2400
 
 func _ready() -> void:
+	TestGuard.arm("noise_test", 45, get_tree())
 	var c := Character.create_default()
 	c.name = "噪音测试"
 	c.talent_id = "fighter"

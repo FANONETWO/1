@@ -20,6 +20,7 @@ config/features=PackedStringArray("4.7")
 EventBus="*res://autoload/event_bus.gd"
 Game="*res://autoload/game.gd"
 DebugLog="*res://autoload/debug_log.gd"
+AudioManager="*res://autoload/audio_manager.gd"
 
 [display]
 
@@ -33,7 +34,6 @@ enabled=PackedStringArray("res://addons/hasturoperationgd/plugin.cfg")
 
 [rendering]
 
+textures/canvas_textures/default_texture_filter=0
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
-; 像素风关键：纹理过滤 = Nearest（0），避免像素被双线性插值糊掉
-textures/canvas_textures/default_texture_filter=0

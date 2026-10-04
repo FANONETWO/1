@@ -5,6 +5,7 @@ extends Control
 ## 背景：此前死亡单位只把 hp 归零，地图节点从不移除，玩家会看到「怪被打死了却不消失」。
 
 func _ready() -> void:
+	TestGuard.arm("kill_removal_test", 45, get_tree())
 	var p := Character.create_default()
 	p.name = "击杀测试"
 	p.talent_id = "fighter"

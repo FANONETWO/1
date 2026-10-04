@@ -5,6 +5,7 @@ extends Control
 ##   godot --headless --path . res://tests/real_flow_test.tscn --quit-after 900
 
 func _ready() -> void:
+	TestGuard.arm("real_flow_test", 45, get_tree())
 	var p := Character.create_default()
 	p.name = "流程测试"
 	p.talent_id = "fighter"

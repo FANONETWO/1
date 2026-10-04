@@ -4,6 +4,7 @@ extends Control
 ##   godot --path . res://tests/persist_test.tscn --quit-after 3600
 
 func _ready() -> void:
+	TestGuard.arm("persist_test", 60, get_tree())
 	var c := Character.create_default()
 	c.name = "持久化测试"
 	c.talent_id = "fighter"

@@ -8,6 +8,7 @@ const OUT := "res://assets/raw/playtest/"
 var _n := 0
 
 func _ready() -> void:
+	TestGuard.arm("playthrough", 600, get_tree())
 	var c := Character.create_default()
 	c.name = "试玩员"
 	c.talent_id = "fighter"

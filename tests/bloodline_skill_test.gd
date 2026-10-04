@@ -3,6 +3,7 @@ extends Control
 ##   godot --headless --path . res://tests/bloodline_skill_test.tscn --quit-after 1800
 
 func _ready() -> void:
+	TestGuard.arm("bloodline_skill_test", 45, get_tree())
 	var c := Character.create_default()
 	c.name = "技能测试者"
 	c.talent_id = "fighter"

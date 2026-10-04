@@ -59,6 +59,20 @@ func current() -> CombatUnit:
 func is_player_turn() -> bool:
 	return not over and current().is_player
 
+## BattleScene 自管行动队列（不走 end_turn），必须显式告诉 CM「现在轮到谁」。
+## 否则 turn_index 永远停在 start() 的初值上，current() / is_player_turn() 会一直是错的
+## —— pace_test 曾因此判定「玩家出手 0 次」，UI 侧任何依赖它的判断也都会错。
+func set_current(u: CombatUnit) -> void:
+	var idx := order.find(u)
+	if idx >= 0:
+		turn_index = idx
+
+## 单位回合开始（重置 AP 与防御姿态）。BattleScene 每轮到一个人就调一次。
+## ⚠️ 此前 BattleScene 从不调用它 → 玩家一回合把 6 点 AP 用完后**再也不恢复**，
+## 战斗就变成「站着挨打、怎么也打不动」，这也是试玩报告里「打不过大堂」的真凶之一。
+func begin_unit_turn(u: CombatUnit) -> void:
+	_begin_turn(u)
+
 func _begin_turn(u: CombatUnit) -> void:
 	u.ap = u.max_ap
 	u.defending = false
@@ -179,11 +193,11 @@ func try_defend(u: CombatUnit) -> bool:
 
 func try_use_item(u: CombatUnit, item_id: String) -> Dictionary:
 	if u.ap < AP_ITEM:
-		DebugLog.ev("item", "用药被拒", {"item": item_id, "reason": "行动点不足", "ap": u.ap})
+		_ev("item", "用药被拒", {"item": item_id, "reason": "行动点不足", "ap": u.ap})
 		return {"ok": false, "reason": "行动点不足"}
 	var d: Dictionary = Items.get_def(item_id)
 	if d.get("kind", "") != "consumable":
-		DebugLog.ev("item", "用药被拒", {"item": item_id, "reason": "非消耗品"})
+		_ev("item", "用药被拒", {"item": item_id, "reason": "非消耗品"})
 		return {"ok": false, "reason": "无法使用"}
 	u.ap -= AP_ITEM
 	var hp_before := u.hp
@@ -201,7 +215,7 @@ func try_use_item(u: CombatUnit, item_id: String) -> Dictionary:
 	if u.is_player:
 		u.char_ref.inventory.erase(item_id)
 	_log("%s 使用了 %s（%s）。" % [u.name, Items.name_of(item_id), effect])
-	DebugLog.ev("item", "用药", {
+	_ev("item", "用药", {
 		"item": item_id, "hp": [hp_before, u.hp], "max_hp": u.max_hp,
 		"will": [will_before, u.char_ref.will if u.is_player and u.char_ref != null else 0],
 		"effect": effect,
@@ -336,6 +350,21 @@ func reward_points() -> int:
 		if not u.is_player:
 			total += u.reward
 	return total
+
+## 结构化日志：autoload 可能不存在（`-s` 脚本模式）。
+## ⚠️ 直接写 `DebugLog.ev(...)` 会让整个脚本**编译失败**（Identifier not found），
+## 而 -s 单测的 quit() 在编译失败后永远不会执行 → 进程挂死。
+## 这就是 combat_test 曾经「跑不通」的根因，所以这里统一走安全访问。
+func _ev(cat: String, msg: String, data: Dictionary = {}) -> void:
+	var loop := Engine.get_main_loop()
+	if loop == null:
+		return
+	var root: Node = loop.root
+	if root == null:
+		return
+	var dbg: Node = root.get_node_or_null("/root/DebugLog")
+	if dbg != null and dbg.has_method("ev"):
+		dbg.ev(cat, msg, data)
 
 func _log(text: String) -> void:
 	logs.append(text)

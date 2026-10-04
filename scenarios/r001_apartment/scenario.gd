@@ -98,6 +98,10 @@ func _ready() -> void:
 	if _player_pos == MapData.SPAWN:
 		_log_line(Content.INTRO)
 	_refresh_hud()
+	AudioManager.play_bgm("explore")
+	# 新手引导（试玩报告 C3）：本次副本第一次进入时弹出，之后可用右上「引导」按钮重看
+	if not _tutorial_done():
+		_show_tutorial(0)
 
 # ——— 世界构建（箱庭制）———
 
@@ -160,6 +164,14 @@ func _load_room(room_id: String, entry_cell: Vector2i, from_dir: String = "") ->
 	_map.set_highlight(_player_pos, Color(0.4, 0.85, 1.0, 0.35))
 	_sort_entities()
 	_refresh_hud()
+	# 已探索记忆按房间独立（C5）；换房间补一记开门音 + 中央大字幕（C6）
+	if _map is PixelGridRenderer:
+		(_map as PixelGridRenderer).reset_seen()
+	if from_dir != "":
+		AudioManager.play("door")
+	_announce_room(room_id)
+	# 不同房间可能有相同坐标 → 强制重算迷雾，否则会沿用上一间的视野
+	_fog_at = Vector2i(-99, -99)
 	# 关键：刚落地时上锁，否则若出生点恰是出口格会立刻被弹到隔壁
 	_exit_lock = 0.8
 
@@ -375,6 +387,15 @@ func _sort_entities() -> void:
 
 # ——— UI ———
 
+## HUD 按钮工厂：统一挂上点击音效（避免每个按钮各写一遍）
+func _hud_button(text: String, cb: Callable) -> Button:
+	var b := Button.new()
+	b.text = text
+	b.pressed.connect(func() -> void:
+		AudioManager.play("ui_click")
+		cb.call())
+	return b
+
 func _build_ui() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	var bg := ColorRect.new()
@@ -407,18 +428,10 @@ func _build_ui() -> void:
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	top.add_child(spacer)
-	var task_btn := Button.new()
-	task_btn.text = "任务"
-	task_btn.pressed.connect(_show_tasks)
-	top.add_child(task_btn)
-	var char_btn := Button.new()
-	char_btn.text = "角色"
-	char_btn.pressed.connect(_show_character)
-	top.add_child(char_btn)
-	var rules_btn := Button.new()
-	rules_btn.text = "规则"
-	rules_btn.pressed.connect(_show_rules)
-	top.add_child(rules_btn)
+	top.add_child(_hud_button("任务", _show_tasks))
+	top.add_child(_hud_button("角色", _show_character))
+	top.add_child(_hud_button("引导", func() -> void: _show_tutorial(0)))
+	top.add_child(_hud_button("规则", _show_rules))
 
 	_hud_quest = Label.new()
 	_hud_quest.set_anchors_preset(Control.PRESET_TOP_WIDE)
@@ -478,6 +491,85 @@ func _build_ui() -> void:
 
 	EventBus.log_line.connect(_on_log_line)
 	EventBus.combat_log.connect(_on_log_line)
+
+## 交互半径（试玩报告 B2：只给 1 格时玩家会以为「点了没反应」）
+## 适用于 NPC 对话与调查点（无敌人房间里走过去本来就没风险）
+const INTERACT_RANGE := 2
+
+## 新手引导三步（试玩报告 C3：进副本后 30 秒不知道该干嘛）
+const TUTORIAL: Array = [
+	{
+		"title": "引导 1/3 · 怎么走，要做什么",
+		"body": "① 左键点【可走的地砖】→ 角色走过去（一格一格走）。\n② 点【敌人 / 柜子 / 桌子 / 床 / NPC】→ 交互（相邻才动手）。\n③ 走到【门口的地砖】→ 进入下一个房间。\n④ 右上角「任务」看目标，「角色」看属性，「规则」查判定公式。\n\n主线：找到安全出口钥匙 → 摸到消防门撤离。",
+	},
+	{
+		"title": "引导 2/3 · 回合制：敌人什么时候转身",
+		"body": "你行动一次后，【所有敌人各走一步】—— 这一层是回合制，不是实时。\n\n· 空格 = 结束这一回合（原地等待/观察）。\n· 敌人脚下的【红色格子】是它的视野锥：站在它背后 = 突袭（你抢先手）；走进锥里 = 被发现（它先手）。\n· 视野外是黑的，那是迷雾，不是画面坏了。",
+	},
+	{
+		"title": "引导 3/3 · 噪音与黑暗",
+		"body": "· 走动、翻柜子、开枪都会产生【噪音】（HUD 右上「噪音」）。\n· 噪音到 6 / 10 / 14 会分别招来 逐尸 / 爬行者 / 尸群 —— 越吵越危险，安静下来会自己衰减。\n· 你只能看清 6 格内、且没有被墙挡住的地方；走过的房间会留下【暗色轮廓】（已探索记忆）。\n· 走廊和大堂的怪物会巡逻转向；【房间里的不会动】（它们困住了）。",
+	},
+]
+
+var _banner: Label = null      # 换房间时画面中央的大字幕
+
+func _tutorial_done() -> bool:
+	return bool(Game.dungeon_state(DUNGEON_ID)["flags"].get("tutorial_done", false))
+
+## 只读查询（常量没法通过 Object.get 读到，测试与 UI 走这两个出口）
+func interact_range() -> int:
+	return INTERACT_RANGE
+
+func tutorial_pages() -> int:
+	return TUTORIAL.size()
+
+func _mark_tutorial_done() -> void:
+	Game.dungeon_state(DUNGEON_ID)["flags"]["tutorial_done"] = true
+
+## 跳过新人引导（玩家点「跳过引导」走的就是这里；测试也用它来模拟"老玩家"，
+## 否则引导浮层会挡住模拟点击 —— click_test / pace_test 曾因此失败）
+func skip_tutorial() -> void:
+	_mark_tutorial_done()
+	_close_modal()
+
+func _show_tutorial(page: int) -> void:
+	AudioManager.play("ui_click")
+	if page >= TUTORIAL.size():
+		_mark_tutorial_done()
+		_close_modal()
+		return
+	var t: Dictionary = TUTORIAL[page]
+	var last := page == TUTORIAL.size() - 1
+	var opts: Array = [{
+		"label": "开始行动" if last else "下一页",
+		"on_press": func() -> void:
+			if last:
+				_mark_tutorial_done()
+			else:
+				_show_tutorial(page + 1),
+	}]
+	if not last:
+		opts.append({"label": "跳过引导", "on_press": func() -> void: _mark_tutorial_done()})
+	_open_modal(String(t["title"]), String(t["body"]), opts)
+
+## 换房间时在画面中央打一条大字幕（试玩报告 C6：12 个箱庭结构相似，玩家分不清自己进了哪）
+func _announce_room(room_id: String) -> void:
+	if _banner == null or not is_instance_valid(_banner):
+		_banner = Label.new()
+		_banner.set_anchors_preset(Control.PRESET_CENTER)
+		_banner.grow_horizontal = Control.GROW_DIRECTION_BOTH
+		_banner.grow_vertical = Control.GROW_DIRECTION_BOTH
+		_banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_banner.add_theme_font_size_override("font_size", 34)
+		_banner.modulate = Color(1, 1, 1, 0)
+		add_child(_banner)
+	_banner.text = R001Rooms.room_name(room_id)
+	var tw := create_tween()
+	tw.tween_property(_banner, "modulate:a", 1.0, 0.25)
+	tw.tween_interval(1.1)
+	tw.tween_property(_banner, "modulate:a", 0.0, 0.6)
 
 func _show_tasks() -> void:
 	var lines: Array[String] = []
@@ -590,6 +682,7 @@ func _click_entity(g: Vector2i) -> bool:
 					_log_line("[color=#ff8c66]%s 已经看到你了。[/color]" % Enemies.name_of(String(e["def_id"])))
 				_start_combat_with(String(e["def_id"]), surprise)
 			else:
+				AudioManager.play("ui_deny")
 				_log_line("你得先靠近它。")
 			return true
 	# NPC
@@ -692,6 +785,7 @@ func _move_along(path: Array, i: int) -> void:
 	var nxt: Vector2i = path[i]
 	var step := func() -> void:
 		_player_pos = nxt
+		AudioManager.play_varied("step", 0.06, {"throttle": 110})
 		_refresh_sight()
 		if _check_engagement():
 			_moving = false
@@ -724,9 +818,12 @@ func _talk_npc(nid: String) -> void:
 	if not _npc_nodes.has(nid):
 		return
 	var e: Dictionary = _npc_nodes[nid]
-	if _manhattan(_player_pos, Vector2i(e["pos"])) > 1:
-		_log_line("太远了，走过去再说。")
+	var dist := _manhattan(_player_pos, Vector2i(e["pos"]))
+	if dist > INTERACT_RANGE:
+		AudioManager.play("ui_deny")
+		_log_line("太远了（还差 %d 格），走近一点再说话。" % (dist - INTERACT_RANGE))
 		return
+	AudioManager.play("ui_click")
 	# nid 是「房间/裸id」的完整 key；对话表按裸 id 索引，这里必须剥掉前缀
 	var bare := String(e.get("def_id", nid))
 	if bare == "chen":
@@ -816,9 +913,12 @@ func _inspect_spot(sid: String) -> void:
 	if not _spot_nodes.has(sid):
 		return
 	var sp: Dictionary = _spot_nodes[sid]
-	if _manhattan(_player_pos, Vector2i(sp["pos"])) > 1:
-		_log_line("太远了，走过去再说。")
+	var dist := _manhattan(_player_pos, Vector2i(sp["pos"]))
+	if dist > INTERACT_RANGE:
+		AudioManager.play("ui_deny")
+		_log_line("太远了（还差 %d 格），走近一点再动手。" % (dist - INTERACT_RANGE))
 		return
+	AudioManager.play("ui_click")
 	# 同上：剥掉房间前缀，match 用的才是裸 id
 	var bare := String(sp.get("def_id", sid))
 	match bare:
@@ -940,6 +1040,7 @@ func _run_check_async(ck: Dictionary, done: Callable) -> void:
 func _resolve_check(attr_id: String, skill_id: String, dc: int, extra: int, done: Callable) -> void:
 	var p := _player
 	var res := DicePool.roll(p.attr(attr_id), p.skill(skill_id), 0, extra, skill_id)
+	AudioManager.play("dice")
 	var ok := int(res["total"]) >= dc
 	var cont := func() -> void:
 		_close_modal()
@@ -988,6 +1089,7 @@ func _start_combat_with(enemy_id: String, surprise: bool = false) -> void:
 	# 主角固定在左、怪物在右，不使用地图格子。
 	_battle = BattleScene.new()
 	add_child(_battle)
+	AudioManager.play_bgm("battle")
 	_battle.finished.connect(_on_battle_finished)
 	_battle._player_pos_hint = _player_pos
 	_battle.setup(self, Game.player, encounter, surprise)
@@ -1006,6 +1108,8 @@ func _on_battle_finished(victory: bool) -> void:
 		"points": pts, "hp": int(_player.hp), "room": _room_id,
 	})
 	_battle.queue_free()
+	AudioManager.play_bgm("explore")
+	AudioManager.play("ui_confirm" if victory else "ui_deny")
 	_battle = null
 	_player_pos = end_pos          # 位置连续：停在战斗结束的那一格
 	if victory:
@@ -1070,6 +1174,8 @@ func _finish_scenario(ending: String, kill_points: int = -1) -> void:
 	# 基础奖励必须计入合计 —— 之前漏了，结算显示「基础 +1,000」但合计只有击杀分
 	var total := (BASE_REWARD + quest_pts + kill_pts + clue_pts) if ending != "death" else 0
 	var res: Dictionary = Content.settlement(p.name, ending, _clue_count(), quest_pts, kill_pts, total)
+	AudioManager.play_bgm("")
+	AudioManager.play("defeat" if ending == "death" else "evac")
 	EventBus.scenario_finished.emit(res)
 	Game.finish_scenario(res)
 	_show_settlement(res)
@@ -1146,6 +1252,7 @@ func _add_clue(id: String, text: String) -> void:
 	if _has_clue(id):
 		return
 	_flags()["clue:" + id] = text
+	AudioManager.play("clue")
 	DebugLog.ev("clue", "获得线索", {"id": id, "总数": _clue_count()})
 	_log_line("[color=#ffd75e]【线索】%s[/color]" % text)
 	_refresh_hud()
@@ -1175,6 +1282,7 @@ func _add_noise(amount: int, reason: String = "") -> void:
 	if amount <= 0 or _battle != null:
 		return
 	_noise = mini(NOISE_MAX, _noise + amount)
+	AudioManager.play("noise", {"throttle": 1500})
 	if reason != "":
 		_log_line("[color=#ffb3b3]噪音 +%d（%s）　当前 %d[/color]" % [amount, reason, _noise])
 	_refresh_hud()
@@ -1392,7 +1500,7 @@ func _refresh_hud() -> void:
 	for qid in _quests.defs:
 		if _quests.is_active(StringName(qid)):
 			qs.append(String(QuestsDef.get_def(String(qid)).get("name", qid)))
-	_hud_quest.text = "任务：%s" % ("　|　".join(qs) if not qs.is_empty() else "无")
+	_hud_quest.text = "【%s】任务：%s" % [R001Rooms.room_name(_room_id), "　|　".join(qs) if not qs.is_empty() else "无"]
 
 static func _manhattan(a: Vector2i, b: Vector2i) -> int:
 	return absi(a.x - b.x) + absi(a.y - b.y)

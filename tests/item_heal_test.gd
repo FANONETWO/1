@@ -8,6 +8,7 @@ extends Control
 ##   & $godot --path . res://tests/item_heal_test.tscn --quit-after 3600
 
 func _ready() -> void:
+	TestGuard.arm("item_heal_test", 45, get_tree())
 	var c := Character.create_default()
 	c.name = "用药测试"
 	c.talent_id = "fighter"

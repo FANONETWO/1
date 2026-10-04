@@ -3,6 +3,7 @@ extends Control
 ##   godot --headless --path . res://tests/combat_return_test.tscn --quit-after 600
 
 func _ready() -> void:
+	TestGuard.arm("combat_return_test", 45, get_tree())
 	var p := Character.create_default()
 	p.name = "回归测试"
 	p.talent_id = "fighter"

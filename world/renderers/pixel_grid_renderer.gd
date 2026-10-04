@@ -46,6 +46,7 @@ var _path: Array[Vector2i] = []    # 路径预览
 var _deco: Array = []              # 装饰层：[{pos, name, off}]，铺在地板之上、覆盖层之下
 var _deco_tex: Dictionary = {}     # 装饰名 -> Texture2D
 var _visible: Dictionary = {}      # 视野内的格子（战场迷雾）：不在其中的压暗
+var _seen: Dictionary = {}         # 已探索记忆（C5）：去过的地方留暗色轮廓，未去过的更黑
 var _fog_on := false               # 迷雾开关
 
 const DECO_NAMES: Array[String] = [
@@ -101,12 +102,28 @@ func deco_count() -> int:
 	return _deco.size()
 
 ## 战场迷雾：只有这些格子保持明亮，其余压暗（恐怖感的主要来源）
+## 同时把这些格子记进「已探索记忆」—— 走过的房间回头还能看见暗色轮廓，不至于迷路。
 func set_visible_cells(cells: Array, enable: bool = true) -> void:
 	_visible.clear()
 	for p in cells:
-		_visible[Vector2i(p)] = true
+		var v := Vector2i(p)
+		_visible[v] = true
+		_seen[v] = true
 	_fog_on = enable
 	queue_redraw()
+
+## 清空已探索记忆（切换箱庭时调用：每个房间的记忆互相独立）
+func reset_seen() -> void:
+	_seen.clear()
+	queue_redraw()
+
+## 已记住的格子数（供测试与诊断）
+func seen_count() -> int:
+	return _seen.size()
+
+## 某格是否已被探索过
+func is_seen(p: Vector2i) -> bool:
+	return _seen.has(p)
 
 func fog_enabled() -> bool:
 	return _fog_on
@@ -176,8 +193,14 @@ func _draw() -> void:
 		draw_rect(cell_rect(_highlight["pos"]), _highlight["color"], false, 3.0)
 
 	# 战场迷雾：视野外的格子压暗。画在最上层，遮住地形与装饰。
+	# 分两档（C5 已探索记忆）：去过的地方只压暗一点、留下可辨认的轮廓；从没去过的是近乎全黑。
 	if _fog_on and grid != null:
 		for y in grid.rows():
 			for x in grid.cols():
-				if not _visible.has(Vector2i(x, y)):
-					draw_rect(cell_rect(Vector2i(x, y)), Color(0.02, 0.03, 0.06, 0.74))
+				var p := Vector2i(x, y)
+				if _visible.has(p):
+					continue
+				if _seen.has(p):
+					draw_rect(cell_rect(p), Color(0.02, 0.03, 0.06, 0.56))
+				else:
+					draw_rect(cell_rect(p), Color(0.02, 0.03, 0.06, 0.88))

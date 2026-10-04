@@ -3,6 +3,7 @@ extends Control
 ##   godot --headless --path . res://tests/stealth_test.tscn --quit-after 1800
 
 func _ready() -> void:
+	TestGuard.arm("stealth_test", 45, get_tree())
 	var c := Character.create_default()
 	c.name = "潜行测试"
 	c.talent_id = "fighter"

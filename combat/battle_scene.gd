@@ -368,6 +368,11 @@ func _next_actor() -> void:
 	if u.hp <= 0:
 		_next_actor()
 		return
+	# 关键：把「现在轮到谁」同步给 CM，并给该单位重置 AP + 清防御姿态。
+	# 少了这两行，玩家的 6 点 AP 用完就再也不恢复（表现为「怎么打都打不动」），
+	# cm.is_player_turn() 也会永远停在初始值上。
+	_cm.set_current(u)
+	_cm.begin_unit_turn(u)
 	_refresh_all()
 	if u.is_player:
 		_phase = "input"
@@ -423,7 +428,9 @@ func _add_sub_button(text: String, cb: Callable, disabled := false) -> Button:
 	b.add_theme_font_size_override("font_size", 15)
 	b.disabled = disabled
 	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	b.pressed.connect(cb)
+	b.pressed.connect(func() -> void:
+		AudioManager.play("ui_click")
+		cb.call())
 	_sub_box.add_child(b)
 	return b
 
@@ -512,6 +519,7 @@ func _use_skill(node_id: String) -> void:
 
 func _execute_skill(node_id: String, target: CombatUnit) -> void:
 	_phase = "anim"
+	AudioManager.play("bloodline")
 	_clear_sub()
 	_cmd_box.visible = false
 	var pl := _player
@@ -609,9 +617,11 @@ func _use_item(id: String) -> void:
 	_cmd_box.visible = false
 	var res := _cm.try_use_item(_cm.player_unit, id)
 	if not res.get("ok", false):
+		AudioManager.play("ui_deny")
 		_log_line(String(res.get("reason", "无法使用。")))
 		_advance()
 		return
+	AudioManager.play("heal")
 	_apply_player_hp()
 	var stab := int(Items.get_def(id).get("stabilize", 0))
 	if stab > 0:
@@ -678,6 +688,7 @@ func _on_cmd_defend() -> void:
 	# +2 由 resolve_attack 按姿态标记计算；回合开始由 begin_round 还原
 	# （此前是 defense += 2 永久叠防，每回合白嫖）
 	_cm.player_unit.defending = true
+	AudioManager.play("ui_confirm")
 	_log_line("[color=#8cd8ff]你摆出防御姿态（防御 +2，直到下回合）。[/color]")
 	_advance()
 
@@ -685,12 +696,15 @@ func _on_cmd_flee() -> void:
 	_clear_sub()
 	_cmd_box.visible = false
 	var roll := DicePool.roll(_player.attr("dex"), _player.skill("hide"), 0, 0, "hide")
+	AudioManager.play("dice")
 	if int(roll.get("total", 0)) > 0:
+		AudioManager.play("ui_confirm")
 		_log_line("[color=#ffd75e]你成功脱离了战斗。[/color]")
 		await _wait(0.8)
 		_flee_success = true
 		_finish(false, true)
 	else:
+		AudioManager.play("ui_deny")
 		_log_line("[color=#ff8c66]逃跑失败！[/color]")
 		_advance()
 
@@ -714,6 +728,7 @@ func _play_strike(att: CombatUnit, target: CombatUnit, res: Dictionary) -> void:
 	var dmg := int(res.get("damage", 0))
 	var hit := bool(res.get("hit", true))
 	if not hit:
+		AudioManager.play("miss", {"throttle": 60})
 		_spawn_text(tn.position + Vector2(60, 40), "MISS", Color(0.8, 0.8, 0.8))
 		_log_line("%s 没有击中 %s。" % [att.name, target.name])
 		return
@@ -723,6 +738,13 @@ func _play_strike(att: CombatUnit, target: CombatUnit, res: Dictionary) -> void:
 	_shake(9.0, 0.20)
 	await anim_hurt(tn, dir)
 	var crit: bool = int(res.get("successes", 0)) >= 4
+	# 打击感：暴击 / 我方挨打 / 敌人挨打 三种音色分开，配合命中停顿与震动
+	if crit:
+		AudioManager.play("crit")
+	elif target.is_player:
+		AudioManager.play("hurt")
+	else:
+		AudioManager.play("hit")
 	_spawn_text(tn.position + Vector2(60, 30), "-%d" % dmg,
 		Color(1.0, 0.9, 0.3) if crit else Color(1, 0.4, 0.4))
 	if crit:
@@ -731,6 +753,7 @@ func _play_strike(att: CombatUnit, target: CombatUnit, res: Dictionary) -> void:
 		att.name, target.name, int(res.get("successes", 0)), dmg,
 	])
 	if target.hp <= 0:
+		AudioManager.play("die")
 		_log_line("[color=#ffb3b3]%s 倒下了。[/color]" % target.name)
 		await anim_die(tn)
 
@@ -738,6 +761,7 @@ func _play_skill_hit(target: CombatUnit, power: int) -> void:
 	var tn := _node_of(target)
 	if tn == null:
 		return
+	AudioManager.play("skill", {"throttle": 80})
 	fx_sword_aura(tn.position + Vector2(60, 50))
 	await _hit_stop(0.05)
 	var tw := create_tween()
@@ -995,6 +1019,7 @@ func _check_unstable_before_input() -> void:
 	if chance <= 0.0 or randf() >= chance:
 		_show_commands()
 		return
+	AudioManager.play("bloodline")
 	_log_line("[color=#ff6b6b]【血脉失控】两条血脉互相撕扯，你失去了本回合的控制！[/color]")
 	var pu := _cm.player_unit
 	pu.hp = maxi(0, pu.hp - 1)
@@ -1036,6 +1061,7 @@ func _finish(victory: bool, is_fleeing := false) -> void:
 		_log_line("[color=#8cd8ff]—— 你脱离了战斗 ——[/color]")
 		await _wait(0.6)
 	else:
+		AudioManager.play("defeat")
 		_log_line("[color=#ff6b6b]—— 你倒下了 ——[/color]")
 		await _wait(1.0)
 	finished.emit(victory)

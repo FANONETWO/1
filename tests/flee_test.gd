@@ -3,6 +3,7 @@ extends Control
 ##   godot --path . res://tests/flee_test.tscn --quit-after 3600
 
 func _ready() -> void:
+	TestGuard.arm("flee_test", 60, get_tree())
 	var c := Character.create_default()
 	c.name = "逃跑测试"
 	c.talent_id = "fighter"

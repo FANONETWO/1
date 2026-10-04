@@ -9,6 +9,7 @@ extends Control
 ##   godot --path . res://tests/battle_rules_test.tscn --quit-after 3600
 
 func _ready() -> void:
+	TestGuard.arm("battle_rules_test", 45, get_tree())
 	var c := Character.create_default()
 	c.name = "战斗规则测试"
 	c.talent_id = "fighter"

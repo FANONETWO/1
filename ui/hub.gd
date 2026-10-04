@@ -13,6 +13,7 @@ var _best_label: Label
 
 func _ready() -> void:
 	theme = PixelTheme.build()
+	AudioManager.play_bgm("hub")
 	if Game.player == null:
 		get_tree().change_scene_to_file.call_deferred("res://main_menu.tscn")
 		return

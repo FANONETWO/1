@@ -3,6 +3,7 @@ extends Control
 
 func _ready() -> void:
 	theme = PixelTheme.build()
+	AudioManager.play_bgm("hub")
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	var bg := ColorRect.new()
 	bg.color = Color(0.02, 0.02, 0.05)
@@ -40,6 +41,7 @@ func _ready() -> void:
 	var new_btn := Button.new()
 	new_btn.text = "新的开始"
 	new_btn.pressed.connect(func() -> void:
+		AudioManager.play("ui_confirm")
 		get_tree().change_scene_to_file("res://ui/char_creation.tscn")
 	)
 	v.add_child(new_btn)
@@ -49,6 +51,7 @@ func _ready() -> void:
 	cont.text = "继续" if not dead else "继续（角色已阵亡）"
 	cont.disabled = not Game.has_save() or dead
 	cont.pressed.connect(func() -> void:
+		AudioManager.play("ui_confirm")
 		if Game.load_game():
 			Game.go_hub()
 		else:
@@ -57,7 +60,10 @@ func _ready() -> void:
 	v.add_child(cont)
 	var quit := Button.new()
 	quit.text = "退出"
-	quit.pressed.connect(func() -> void: get_tree().quit())
+	quit.pressed.connect(func() -> void:
+		AudioManager.play("ui_click")
+		get_tree().quit()
+	)
 	v.add_child(quit)
 
 	var hint := Label.new()

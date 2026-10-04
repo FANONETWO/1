@@ -12,6 +12,7 @@ extends Control
 const OUT := "res://assets/raw/playtest_real/"
 
 func _ready() -> void:
+	TestGuard.arm("real_playthrough", 900, get_tree())
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT))
 	var d := Driver.new()
 	get_tree().root.add_child.call_deferred(d)

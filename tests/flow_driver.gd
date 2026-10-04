@@ -3,6 +3,7 @@ extends Control
 ##   godot --headless --path . res://tests/flow_driver.tscn --quit-after 720
 
 func _ready() -> void:
+	TestGuard.arm("flow_driver", 45, get_tree())
 	var p := Character.create_default()
 	p.name = "冒烟轮回者"
 	p.attrs["str"] = 4

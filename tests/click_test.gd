@@ -7,6 +7,7 @@ extends Control
 ##   godot --headless --path . res://tests/click_test.tscn --quit-after 1200
 
 func _ready() -> void:
+	TestGuard.arm("click_test", 45, get_tree())
 	var p := Character.create_default()
 	p.name = "点击测试"
 	p.attrs["str"] = 4
@@ -41,6 +42,8 @@ class ClickDriver:
 				if _t > 1.0:
 					_step = 1
 					var sc = get_tree().current_scene
+					# 引导浮层是模态的，会拦住点击 → 先按「跳过引导」处理，模拟老玩家
+					sc.skip_tutorial()
 					_before = sc._player_pos
 					# 1) 分发链：push_input 注入（坐标在 headless 下被放大，不影响"是否到达"的判断）
 					var ev0 := InputEventMouseButton.new()
