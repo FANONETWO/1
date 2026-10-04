@@ -86,9 +86,12 @@ func begin() -> void:
 		start_idle_breath(s["root"])
 	if _surprise:
 		_log_line("[color=#ffd75e]【突袭】敌人措手不及 —— 你先行动！[/color]")
-	_log_line("[color=#9fe3ff]面板　生命 %d　意志 %d　暴击 %d%%　移动 %d　战术点 %d　光环 %d格[/color]" % [
+	# 注意：这里显示的是**战斗内的指挥点**（= 智力/2，团队模式另有协作加成），
+	# 不是角色卡上的旧字段 tactical_points() —— 团队模式下两者会不一样，
+	# 曾经面板写「战术点 0」而行动条写「指挥点 5」，玩家会以为坏了。
+	_log_line("[color=#9fe3ff]面板　生命 %d　意志 %d　暴击 %d%%　移动 %d　指挥点 %d　光环 %d格[/color]" % [
 		_player.max_hp(), _player.max_will(), _player.crit_rate(),
-		_player.move_range(), _player.tactical_points(), _player.aura_range()])
+		_player.move_range(), _cm.command_points(), _player.aura_range()])
 	_start_round()
 
 ## 先手裁定（行动条款）：突袭时把玩家方的初始行动值压到全场最小，抢到第一次出手
