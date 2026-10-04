@@ -30,11 +30,13 @@ var _spot_nodes: Dictionary = {}
 var _player_pos: Vector2i
 var _player: Character
 var _moving := false
-const SIGHT := 2               # 敌人视野基准半径（格）；玩家的视野是 6，留出潜行空间
+const SIGHT := 3               # 敌人视野基准半径（格）；玩家的视野是 6，留出潜行空间
 ## 按类型细分视野：丧尸视力差但尸犬鼻子灵 —— 玩家要按敌人种类决定怎么绕。
-## ⚠️ 数值整体收过一轮：原来丧尸 3 格 + 90° 锥，「看到就开战」时等于没有潜行空间。
+## ⚠️ 别再把丧尸压到 2：半径 2 时「被发现」与「贴脸」几乎同时发生
+## （2 格内发现、1 格接触、敌人一回合走 1 格），追逐就没有过程了。
+## 潜行的空间应该靠 90° 锥 + 背后接近来给，不是靠把视野勒到看不见。
 const SIGHT_BY_TYPE := {
-	"walker": 2, "zombie": 2, "crawler": 3,
+	"walker": 3, "zombie": 3, "crawler": 3,
 	"hound": 4, "screamer": 3, "bloater": 1, "cadaver": 2, "brute": 3,
 }
 const PATROL_INTERVAL := 1.7   # 巡逻每格耗时（秒）—— 丧尸走得很慢
@@ -812,6 +814,7 @@ func _update_enemy_alert() -> void:
 		e["lost_turns"] = 0
 		if not bool(e.get("alerted", false)):
 			e["alerted"] = true
+			e["alert_turn"] = _turn      # 记下发现你的回合：它当回合会先愣一下
 			_log_line("[color=#ffd75e]%s 发现了你 —— 它在朝你过来！[/color]" % Enemies.name_of(String(e["def_id"])))
 
 ## 接触判定：只有**已经发现你**的敌人贴到身上才开战。
@@ -844,6 +847,10 @@ func _cell_free_except(p: Vector2i, uid: String) -> bool:
 ## 追击一步：朝玩家（或最后看到他的位置）走一格；贴到身上就开战。
 ## 追到最后已知位置还看不见人 → 数回合后放弃，回到巡逻 —— 所以「甩掉它」是可行的。
 func _chase_step(uid: String, e: Dictionary) -> void:
+	# 刚发现你的那一回合先愣一下再起步（给玩家一个反应窗口）——
+	# 否则「被发现」和「被抓住」会挤在同一瞬间，追逐就白做了。
+	if int(e.get("alert_turn", -999)) == _turn:
+		return
 	var sees := _in_enemy_sight(uid)
 	if sees:
 		e["last_seen"] = _player_pos

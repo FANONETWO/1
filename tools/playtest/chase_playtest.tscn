@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://chase-playtest"]
+
+[ext_resource type="Script" path="res://tools/playtest/chase_playtest.gd" id="1_chase"]
+
+[node name="ChasePlaytest" type="Control"]
+script = ExtResource("1_chase")

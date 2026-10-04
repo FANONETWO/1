@@ -83,13 +83,18 @@ class Driver:
 		_ok(alerted, "被发现后进入追逐状态（alerted=true）")
 		_ok(battle_now == null, "被发现**不**立刻开战（这是潜行能玩的前提）")
 
-		# ——— 2) 敌人回合里朝你走近 ———
+		# ——— 2) 刚发现的那回合它先愣一下（刻意的反应窗口），下一回合才起步 ———
 		var d0 := _dist((enemies[uid] as Dictionary)["pos"], sc.get("_player_pos"))
 		sc._end_player_turn()
 		await get_tree().create_timer(2.4).timeout
 		var d1 := _dist((enemies[uid] as Dictionary)["pos"], sc.get("_player_pos"))
-		print("  · 追击前后距离：%d → %d" % [d0, d1])
-		_ok(d1 < d0 or sc.get("_battle") != null, "敌人回合里朝玩家靠近（%d → %d）" % [d0, d1])
+		print("  · 第 1 个敌人回合（应愣住）：距离 %d → %d" % [d0, d1])
+		_ok(d1 >= d0 or sc.get("_battle") != null, "刚发现你的那回合它先愣一下（%d → %d）" % [d0, d1])
+		sc._end_player_turn()
+		await get_tree().create_timer(2.4).timeout
+		var d2 := _dist((enemies[uid] as Dictionary)["pos"], sc.get("_player_pos"))
+		print("  · 第 2 个敌人回合（应起步）：距离 %d → %d" % [d1, d2])
+		_ok(d2 < d1 or sc.get("_battle") != null, "下一回合开始追击（%d → %d）" % [d1, d2])
 
 		# ——— 3) 一直推进到贴上 → 这时才开战 ———
 		var rounds := 1
