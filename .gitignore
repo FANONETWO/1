@@ -24,3 +24,22 @@ assets/raw/
 
 # 本地扫描工具状态
 .mimosa/
+
+# ——— 联合开发补充 ———
+# IDE / 编辑器（每人环境不同，必然无意义冲突）
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 本机路径相关的导出配置
+export_presets.cfg
+
+# Godot 写入的用户目录（存档 / 日志）
+user://
+
+# ——— 注意 ———
+# 资源旁边的 *.import 文件**必须提交**（Godot 靠它引用资源），
+# 上面忽略的 .godot/ 只是导入缓存，两者不是一回事。
+!*.import
+

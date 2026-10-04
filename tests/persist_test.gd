@@ -97,6 +97,20 @@ class Driver:
 		if n2 != n1 or n2 < 1:
 			ok = false
 
-		# ——— 3) 跨 new_game 会清空（不该把上一局带过来）———
+		# ——— 3) 跨 new_game 必须清空（新轮回不继承上一轮的击杀/拾取/旗标）———
+		var killed_n: int = Game.dungeon_state("r001_apartment")["killed"].size()
+		print("[persist] new_game 前 killed=%d（本局击杀过，应 ≥1）" % killed_n)
+		if killed_n < 1:
+			print("[persist] FAIL 前置条件不成立：本局应已有击杀记录")
+			ok = false
+		var saved_player = Game.player
+		Game.new_game()
+		if not Game.dungeon_state("r001_apartment")["killed"].is_empty():
+			print("[persist] FAIL new_game 后 killed 未清空 —— 新轮回继承了上一轮进度")
+			ok = false
+		else:
+			print("[persist] OK  new_game 后副本进度已清空")
+		Game.set_player(saved_player)   # 恢复角色，避免把无玩家存档留给后续流程
+
 		print("persist_test: %s" % ("PASS" if ok else "FAIL"))
 		get_tree().quit(0 if ok else 1)

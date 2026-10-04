@@ -243,7 +243,8 @@ func _buy_attr(a: String, cost: int) -> void:
 	if Game.points < cost:
 		return
 	Game.points -= cost
-	Game.player.attrs[a] = Game.player.attr(a) + 1
+	# 只加基础值：attr() 含血统属性加成，直接回写会把加成重复烘进基础属性且不可逆
+	Game.player.attrs[a] = int(Game.player.attrs.get(a, 1)) + 1
 	Game.player.refresh()
 	Game.save_game()
 	_refresh()

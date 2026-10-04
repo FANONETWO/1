@@ -58,6 +58,7 @@
 | 点击链路 | `godot --headless --path . res://tests/click_test.tscn --quit-after 1200` | PASS（分发不拦截+点击移动 (2,2)→(5,2)） |
 | 实体定位 | `godot --headless --path . res://tests/scenario_entities_test.tscn --quit-after 600` | PASS（12 个实体：玩家/4 敌人/2 NPC/5 调查点全部按格子就位） |
 | 击杀清理 | `godot --headless --path . res://tests/kill_removal_test.tscn --quit-after 900` | PASS（阵亡单位节点被移除） |
+| 战斗规则 | `godot --headless --path . res://tests/battle_rules_test.tscn --quit-after 1200` | PASS（防御不叠加/首击减伤每回合重置/意志限次/弹药消耗/逃跑技能 id） |
 | 战斗返回 | `godot --headless --path . res://tests/combat_return_test.tscn --quit-after 600` | PASS（战后探索地图上的尸体被清理） |
 | 真实流程 | `godot --headless --path . res://tests/real_flow_test.tscn --quit-after 900` | PASS（探索→战斗→击杀→返回，全链路） |
 | 血统模块 | `godot --headless --path . -s res://tests/bloodline_test.gd` | PASS（八系数据自检、排斥/协同计算、角色集成、存档兼容） |
@@ -96,7 +97,7 @@ scenarios/r001_apartment/  map_data（RE2 箱庭地图）/ dialogs / content / s
 ui/        hub.gd（主神空间）、char_creation.gd（建卡）、bloodline_panel.gd（血统页）、pixel_theme.gd
 demo/      demo_scene.gd（独立试炼场：敌人 AI 追击 + 撤离结算）
 tools/     make_tiles.py（程序化生成地板/墙/门）、pixelize.py、leonardo-bot/（AI 生图流水线）
-tests/     26 项自动化测试（单测 10 + 场景流程 16）；另有 shot_*/repro_* 调试截图脚本
+tests/     27 项自动化测试（单测 10 + 场景流程 17）；另有 shot_*/repro_* 调试截图脚本
 ```
 
 > 注：旧的 `world/iso_map.gd`（等距渲染）与 `systems/pathfinding.gd`（BFS）已被

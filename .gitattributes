@@ -1,0 +1,24 @@
+# 统一换行符为 LF，避免 Windows / macOS 协作者互相产生整文件 diff。
+# 注意：.tscn / .tres / .gd 走文本 diff，png/音频走 LFS。
+* text=auto eol=lf
+
+# 文本文件明确类型（便于 diff 与合并）
+*.gd      text
+*.tscn    text
+*.tres    text
+*.godot   text
+*.md      text
+*.json    text
+
+# 二进制资源走 Git LFS —— 不开 LFS 的话仓库会迅速膨胀到几百 MB，
+# 而且每次改图都会把整个二进制塞进历史，clone 会越来越慢。
+# 首次使用需要：git lfs install
+*.png     filter=lfs diff=lfs merge=lfs -text
+*.jpg     filter=lfs diff=lfs merge=lfs -text
+*.jpeg    filter=lfs diff=lfs merge=lfs -text
+*.webp    filter=lfs diff=lfs merge=lfs -text
+*.ogg     filter=lfs diff=lfs merge=lfs -text
+*.wav     filter=lfs diff=lfs merge=lfs -text
+*.mp3     filter=lfs diff=lfs merge=lfs -text
+*.ttf     filter=lfs diff=lfs merge=lfs -text
+*.otf     filter=lfs diff=lfs merge=lfs -text

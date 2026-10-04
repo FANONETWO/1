@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://battle-rules-test"]
+
+[ext_resource type="Script" path="res://tests/battle_rules_test.gd" id="1_rules"]
+
+[node name="BattleRulesTest" type="Control"]
+script = ExtResource("1_rules")

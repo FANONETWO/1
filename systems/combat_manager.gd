@@ -75,6 +75,15 @@ func end_turn() -> void:
 		# 敌人回合自动行动（由 UI 延迟调用 auto_turn）
 		pass
 
+## 新回合开始：重置「每回合一次」的资源。
+## BattleScene 自管回合队列、不走 end_turn/_begin_turn，需在 _start_round 显式调用：
+## 处变不惊首击减伤重新可用，各单位的防御姿态过期（+2 由 resolve_attack 按标记计算，
+## 不再允许把防御值永久烘进面板）。
+func begin_round() -> void:
+	first_hit_used.clear()
+	for u in units:
+		u.defending = false
+
 ## 敌人 AI：朝最近玩家单位贪心移动，进入攻击范围后攻击。
 ## wall_at: Callable(pos)->bool 判断格子不可走（墙或其他单位）。
 ## 返回 {attacked: bool, result: Dictionary, attacker, target}，供场景层播放战斗演出

@@ -92,6 +92,7 @@ func new_game() -> void:
 	migrated_from = 0
 	pending_scenario_id = &""
 	scenario_state = {}
+	dungeon = {}   # 新轮回不得继承上一轮的副本进度（击杀/拾取/旗标），否则新角色开局即"已通关"
 	world_progress = {}
 	save_game()
 

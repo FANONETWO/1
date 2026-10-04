@@ -31,6 +31,7 @@ var _qi := 0
 var _phase := "idle"           # idle / input / anim / over
 var _surprise := false
 var _defending := false
+var _will_used_round := false   # 意志力每回合限用一次（与指令菜单文案一致）
 var _blood_uses: Dictionary = {}
 var _fusion_used := false
 var killed_uids: Array[String] = []     # 阵亡敌人 uid（探索场景据此移除尸体）
@@ -339,6 +340,8 @@ func _start_round() -> void:
 	_round += 1
 	_turn_label.text = "第 %d 回合" % _round
 	_defending = false
+	_will_used_round = false
+	_cm.begin_round()   # 防御姿态过期 + 处变不惊首击减伤每回合重置
 	_queue.clear()
 	var sorted := _cm.order.duplicate()
 	sorted.sort_custom(func(a, b): return a.init > b.init)
@@ -454,10 +457,16 @@ func _pick_target(title: String, foes: Array, cb: Callable) -> void:
 		)
 
 func _do_player_attack(target: CombatUnit) -> void:
-	_phase = "anim"
 	_cmd_box.visible = false
 	_clear_sub()
+	# 远程武器消耗弹药（此前绕过 try_attack，手枪成了无限弹药）
+	if not _player.has_ammo():
+		_log_line("[color=#ff8c66]弹匣空了，没有弹药！[/color]")
+		_show_commands()
+		return
+	_phase = "anim"
 	var res := _cm.resolve_attack(_cm.player_unit, target)
+	_player.spend_ammo()
 	await _play_strike(_cm.player_unit, target, res)
 	_refresh_all()
 	await _wait(0.35)
@@ -616,6 +625,10 @@ func _use_item(id: String) -> void:
 func _on_cmd_will() -> void:
 	_clear_sub()
 	_cmd_box.visible = false
+	if _will_used_round:
+		_log_line("[color=#ffb3b3]意志力每回合限用一次（本回合已用过）。[/color]")
+		_show_commands()
+		return
 	if _player.will <= 0:
 		_log_line("[color=#ffb3b3]意志力已耗尽（上限 = 2×决心）。[/color]")
 		_advance()
@@ -642,6 +655,7 @@ func _apply_will(kind: String) -> void:
 		_advance()
 		return
 	_player.will -= 1
+	_will_used_round = true
 	var pu := _cm.player_unit
 	match kind:
 		"focus":
@@ -649,7 +663,7 @@ func _apply_will(kind: String) -> void:
 			_log_line("[color=#9fe3ff]意志「专注」：下一次攻击 +1 成功。[/color]")
 		"guard":
 			_defending = true
-			pu.defense += 2
+			pu.defending = true
 			_log_line("[color=#9fe3ff]意志「固守」：本回合防御 +2。[/color]")
 		"dodge":
 			pu.will_dodge = true
@@ -661,15 +675,17 @@ func _on_cmd_defend() -> void:
 	_clear_sub()
 	_cmd_box.visible = false
 	_defending = true
-	_cm.player_unit.defense += 2
+	# +2 由 resolve_attack 按姿态标记计算；回合开始由 begin_round 还原
+	# （此前是 defense += 2 永久叠防，每回合白嫖）
+	_cm.player_unit.defending = true
 	_log_line("[color=#8cd8ff]你摆出防御姿态（防御 +2，直到下回合）。[/color]")
 	_advance()
 
 func _on_cmd_flee() -> void:
 	_clear_sub()
 	_cmd_box.visible = false
-	var roll := DicePool.roll(_player.attr("dex"), _player.skill("subterfuge"))
-	if int(roll.get("successes", 0)) > 0:
+	var roll := DicePool.roll(_player.attr("dex"), _player.skill("hide"), 0, 0, "hide")
+	if int(roll.get("total", 0)) > 0:
 		_log_line("[color=#ffd75e]你成功脱离了战斗。[/color]")
 		await _wait(0.8)
 		_flee_success = true
