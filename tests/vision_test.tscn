@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://vision-test"]
+
+[ext_resource type="Script" path="res://tests/vision_test.gd" id="1_vision"]
+
+[node name="VisionTest" type="Control"]
+script = ExtResource("1_vision")

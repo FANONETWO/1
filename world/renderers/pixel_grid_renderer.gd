@@ -41,7 +41,8 @@ const FALLBACK := {
 var _tex: Dictionary = {}          # 地形字符 -> Texture2D
 var _missing: Array[String] = []   # 缺失素材的地形字符（供诊断）
 var _move: Array[Vector2i] = []    # 可移动范围高亮
-var _attack: Array[Vector2i] = []  # 可攻击范围高亮
+var _attack: Array[Vector2i] = []  # 可攻击范围高亮 / 会立刻发现你的敌人视野
+var _watch: Array[Vector2i] = []   # 敌人视野「预警层」：暗红，提醒那边有眼睛但暂时安全
 var _path: Array[Vector2i] = []    # 路径预览
 var _deco: Array = []              # 装饰层：[{pos, name, off}]，铺在地板之上、覆盖层之下
 var _deco_tex: Dictionary = {}     # 装饰名 -> Texture2D
@@ -56,6 +57,8 @@ const DECO_NAMES: Array[String] = [
 
 const MOVE_TINT := Color(0.25, 0.55, 0.95, 0.38)
 const ATTACK_TINT := Color(0.95, 0.25, 0.25, 0.38)
+## 预警层比危险层暗一档：看得见「有眼睛」，但不会和「会被发现」的格子混淆
+const WATCH_TINT := Color(0.72, 0.22, 0.28, 0.20)
 const PATH_TINT := Color(1.0, 0.85, 0.3, 0.6)
 
 # ——— 覆盖层（GridRenderer 接口实现）———
@@ -68,6 +71,11 @@ func show_attack_range(cells: Array) -> void:
 	_attack.assign(cells)
 	queue_redraw()
 
+## 敌人视野预警层（暗红）：只有「那边有眼睛」的信息量，不代表会被发现
+func show_watch_range(cells: Array) -> void:
+	_watch.assign(cells)
+	queue_redraw()
+
 func show_path(path: Array) -> void:
 	_path.assign(path)
 	queue_redraw()
@@ -75,6 +83,7 @@ func show_path(path: Array) -> void:
 func clear_overlays() -> void:
 	_move.clear()
 	_attack.clear()
+	_watch.clear()
 	_path.clear()
 	_highlight = {}
 	queue_redraw()
@@ -183,8 +192,9 @@ func _draw() -> void:
 	# 覆盖层：移动范围 / 攻击范围 / 路径 / 单格高亮
 	for p in _move:
 		draw_rect(cell_rect(p), MOVE_TINT)
-	for p in _attack:
-		draw_rect(cell_rect(p), ATTACK_TINT)
+	# 预警层（暗红）留在迷雾**之下**：只有你看得见的区域才给提示，恐怖感不破
+	for p in _watch:
+		draw_rect(cell_rect(p), WATCH_TINT)
 	for p in _path:
 		var c := cell_center(p)
 		var s := tile_size * 0.18
@@ -204,3 +214,9 @@ func _draw() -> void:
 					draw_rect(cell_rect(p), Color(0.02, 0.03, 0.06, 0.56))
 				else:
 					draw_rect(cell_rect(p), Color(0.02, 0.03, 0.06, 0.88))
+
+	# 危险层（亮红）画在迷雾**之上** —— 必须穿透黑暗：
+	# 让玩家「在看不见的地方被发现」是纯粹的挫败感，不是难度。
+	# 预警层（暗红）则相反，留给黑暗保留恐怖感。
+	for p in _attack:
+		draw_rect(cell_rect(p), ATTACK_TINT)

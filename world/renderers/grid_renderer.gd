@@ -72,6 +72,10 @@ func show_move_range(_cells: Array) -> void:
 func show_attack_range(_cells: Array) -> void:
 	pass
 
+## 敌人视野「预警层」（暗色）：表示「那边有眼睛，但暂时没看见你」
+func show_watch_range(_cells: Array) -> void:
+	pass
+
 func show_path(_path: Array) -> void:
 	pass
 

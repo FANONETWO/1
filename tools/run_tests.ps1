@@ -41,7 +41,7 @@ $scenes = @(
 	"combat_return_test", "item_heal_test", "bloodline_live_test",
 	"bloodline_skill_test", "room_walk_test", "stealth_test", "stealth_engage_test",
 	"noise_test", "patrol_test", "persist_test", "flee_test", "pace_test",
-	"audio_test", "ux_test", "mode_test", "team_battle_test"
+	"audio_test", "ux_test", "mode_test", "team_battle_test", "vision_test"
 )
 
 $results = @()

@@ -28,6 +28,7 @@ const PATH_TINT := Color(1.0, 0.85, 0.3, 0.55)
 var _move: Array[Vector2i] = []
 var _attack: Array[Vector2i] = []
 var _path: Array[Vector2i] = []
+var _watch: Array[Vector2i] = []   # 敌人视野预警层（降级渲染器不区分，留接口）
 var _units: Dictionary = {}   # uid -> {pos, color, hp, max_hp}
 
 func show_move_range(cells: Array) -> void:
@@ -38,6 +39,11 @@ func show_attack_range(cells: Array) -> void:
 	_attack.assign(cells)
 	queue_redraw()
 
+## 敌人视野预警层：降级渲染器只按同一层画（保证接口一致，不崩）
+func show_watch_range(cells: Array) -> void:
+	_watch.assign(cells)
+	queue_redraw()
+
 func show_path(path: Array) -> void:
 	_path.assign(path)
 	queue_redraw()
@@ -45,6 +51,7 @@ func show_path(path: Array) -> void:
 func clear_overlays() -> void:
 	_move.clear()
 	_attack.clear()
+	_watch.clear()
 	_path.clear()
 	queue_redraw()
 

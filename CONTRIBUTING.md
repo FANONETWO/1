@@ -48,9 +48,9 @@ godot --headless --path . res://tests/flow_driver.tscn --quit-after 6000
 3. **如果是美术/场景改动，截一张图**
 
 ```bash
-# 全量回归（34 项）：推荐直接用运行器 —— 每个测试带时间戳与硬上限，
+# 全量回归（35 项）：推荐直接用运行器 —— 每个测试带时间戳与硬上限，
 # 某个测试卡住会被标成 TIMEOUT 并杀掉，而不是把整批回归拖死
-#   pwsh -File tools/run_tests.ps1              # 全部 34 项
+#   pwsh -File tools/run_tests.ps1              # 全部 35 项
 #   pwsh -File tools/run_tests.ps1 -UnitsOnly   # 只跑 10 项纯逻辑单测
 #   pwsh -File tools/run_tests.ps1 -ScenesOnly  # 只跑 21 项场景/流程测试
 # 下面是不用运行器时的手写等价写法（仅单测部分）：

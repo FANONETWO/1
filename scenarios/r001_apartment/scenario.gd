@@ -40,7 +40,7 @@ const PATROL_INTERVAL := 1.7   # 巡逻每格耗时（秒）—— 丧尸走得�
 
 func _sight_range(def_id: String) -> int:
 	return int(SIGHT_BY_TYPE.get(def_id, SIGHT))
-var _sight_uid := ""           # 当前显示了视野的敌人（缓存，避免每步重绘）
+var _sight_sig := ""           # 视野锥缓存签名（uid + 位置 + 朝向 + 格数），变了才重绘
 var _quests: Quests
 var _clues: Dictionary = {}
 var _combat_points := 0
@@ -189,6 +189,10 @@ func _load_room(room_id: String, entry_cell: Vector2i, from_dir: String = "") ->
 	_sort_entities()
 	# 不同房间可能有相同坐标 → 强制重算迷雾，否则会沿用上一间的视野
 	_fog_at = Vector2i(-99, -99)
+	# 换房间必须重算视野锥：_enemy_nodes 刚被重建，缓存签名也要作废。
+	# 少了这一步，新房间完全看不到敌人视野（曾经的真 bug：进屋 0 格预警）。
+	_sight_sig = ""
+	_refresh_sight()
 	# 关键：刚落地时上锁，否则若出生点恰是出口格会立刻被弹到隔壁
 	_exit_lock = 0.8
 
@@ -523,7 +527,7 @@ const TUTORIAL: Array = [
 	},
 	{
 		"title": "引导 2/3 · 回合制：敌人什么时候转身",
-		"body": "你行动一次后，【所有敌人各走一步】—— 这一层是回合制，不是实时。\n\n· 空格 = 结束这一回合（原地等待/观察）。\n· 敌人脚下的【红色格子】是它的视野锥：站在它背后 = 突袭（你抢先手）；走进锥里 = 被发现（它先手）。\n· 视野外是黑的，那是迷雾，不是画面坏了。",
+		"body": "你行动一次后，【所有敌人各走一步】—— 这一层是回合制，不是实时。\n\n· 空格 = 结束这一回合（原地等待/观察）。\n· 【亮红格子】= 此刻就会被看见：踩进去立刻接敌。\n· 【暗红格子】= 那个敌人的视野范围：你暂时安全，但别久留。\n· 每个敌人只看【正前方 90°】—— 绕到它背后就是突袭（你抢先手）。\n· 视野外是黑的，那是迷雾，不是画面坏了。",
 	},
 	{
 		"title": "引导 3/3 · 噪音与黑暗",
@@ -720,7 +724,17 @@ func _click_entity(g: Vector2i) -> bool:
 
 # ——— 敌人视野与潜行（XCOM 式节奏） ———
 
-## 该敌人视野内的格子（前方 90° 锥 + 半径）
+## 是否落在朝向的前方 **90° 锥**（±45°）内。判据 |d·f| ≥ |d×f| ⟺ 夹角 ≤ 45°。
+## ⚠️ 曾经这里只写 d·f > 0 —— 那是 ±90°（张角 180°），侧后方的敌人也会「看见」你，
+## 与教程承诺的「站在它背后 = 突袭」直接矛盾。改判定必须同步 _in_enemy_sight。
+func _in_cone(d: Vector2i, f: Vector2i) -> bool:
+	var dot := d.x * f.x + d.y * f.y
+	if dot <= 0:
+		return false
+	var crs := d.x * f.y - d.y * f.x
+	return absi(dot) >= absi(crs)
+
+## 该敌人视野内的格子（前方 90° 锥 + 半径 + 通视）
 func _sight_cells(uid: String) -> Array[Vector2i]:
 	var out: Array[Vector2i] = []
 	if not _enemy_nodes.has(uid):
@@ -735,7 +749,7 @@ func _sight_cells(uid: String) -> Array[Vector2i]:
 			var dist := absi(d.x) + absi(d.y)
 			if dist == 0 or dist > _sight_range(String(e["def_id"])):
 				continue
-			if d.x * f.x + d.y * f.y > 0 and _grid.has_line_of_sight(e_pos, p):
+			if _in_cone(d, f) and _grid.has_line_of_sight(e_pos, p):
 				out.append(p)
 	return out
 
@@ -751,28 +765,35 @@ func _in_enemy_sight(uid: String) -> bool:
 	if dist > _sight_range(String(e["def_id"])):
 		return false
 	var f: Vector2i = e.get("facing", Vector2i(0, 1))
-	if d.x * f.x + d.y * f.y <= 0:
+	if not _in_cone(d, f):
 		return false
 	return _grid.has_line_of_sight(e["pos"], _player_pos)   # 墙/柜子/森林挡住视线
 
-## 显示「离玩家最近的敌人」的视野锥，方便规划潜行路线
+## 刷新场上所有敌人的视野锥。两层：
+##   亮红（danger）= 此刻就会看见你的敌人 —— 踩进去立刻接敌
+##   暗红（watch） = 其它敌人的视野 —— 提醒「那边有眼睛」，但你暂时是安全的
+##
+## 缓存签名必须包含**每个敌人的 uid + 位置 + 朝向 + 视野格数**：
+## 只比 uid 的话，巡逻兵转身/移动后视野锥会停在原地不动（这曾经是个真 bug）。
 func _refresh_sight() -> void:
 	if _battle != null:
 		return
-	var best := ""
-	var best_d := 9999
+	var danger: Array[Vector2i] = []
+	var watch: Array[Vector2i] = []
+	var sig := ""
 	for uid in _enemy_nodes:
-		var d := _manhattan(_enemy_nodes[uid]["pos"], _player_pos)
-		if d < best_d:
-			best_d = d
-			best = String(uid)
-	if best == _sight_uid:
+		var e: Dictionary = _enemy_nodes[uid]
+		var cells := _sight_cells(String(uid))
+		sig += "%s@%s%s#%d;" % [uid, str(e["pos"]), str(e.get("facing", Vector2i(0, 1))), cells.size()]
+		if _in_enemy_sight(String(uid)):
+			danger.append_array(cells)
+		else:
+			watch.append_array(cells)
+	if sig == _sight_sig:
 		return
-	_sight_uid = best
-	var cells: Array[Vector2i] = []
-	if best != "":
-		cells = _sight_cells(best)
-	_map.show_attack_range(cells)
+	_sight_sig = sig
+	_map.show_attack_range(danger)
+	_map.show_watch_range(watch)
 
 ## 走进敌人视野 → 被察觉，敌人先手
 func _check_engagement() -> bool:

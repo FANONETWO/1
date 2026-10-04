@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://vision-probe"]
+
+[ext_resource type="Script" path="res://tools/dev/repro/vision_probe.gd" id="1_vision_probe"]
+
+[node name="VisionProbe" type="Control"]
+script = ExtResource("1_vision_probe")
