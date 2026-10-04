@@ -28,6 +28,10 @@
 
 ## 截图
 
+| 开局：主菜单 | 开局：角色创建 |
+|---|---|
+| ![主菜单](assets/screenshots/00_main_menu.png) | ![建卡](assets/screenshots/05_char_creation.png) |
+
 | 探索：迷雾 + 敌人视野锥 | 新手引导（三步，可跳过） |
 |---|---|
 | ![探索](assets/screenshots/02_exploration_fog.png) | ![引导](assets/screenshots/01_tutorial.png) |
@@ -81,6 +85,7 @@ docs/      设计 / 剧情 / 试玩报告 / 开发文档
 |---|---|
 | 完整技术说明（运行 / 玩法 / 验证清单 / 架构） | [docs/项目说明.md](docs/项目说明.md) |
 | 行动条与双模式怎么设计的 | [docs/行动条与模式设计.md](docs/行动条与模式设计.md) |
+| 开局 UI 怎么设计的（明日方舟风） | [docs/UI设计规范_明日方舟风.md](docs/UI设计规范_明日方舟风.md) |
 | 新人 10 分钟接手 | [docs/项目交接指南.md](docs/项目交接指南.md) |
 | 文档有没有过时 | [docs/文档状态总览.md](docs/文档状态总览.md) |
 | 玩家视角的问题清单 | [docs/试玩报告_第1轮.md](docs/试玩报告_第1轮.md) |

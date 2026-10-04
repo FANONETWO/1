@@ -12,7 +12,7 @@ var _store_vbox: VBoxContainer
 var _best_label: Label
 
 func _ready() -> void:
-	theme = PixelTheme.build()
+	theme = AkTheme.build()
 	AudioManager.play_bgm("hub")
 	if Game.player == null:
 		get_tree().change_scene_to_file.call_deferred("res://ui/main_menu.tscn")
@@ -23,33 +23,46 @@ func _ready() -> void:
 
 func _build() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
-	var bg := ColorRect.new()
-	bg.color = Color(0.05, 0.04, 0.09)
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(bg)
+	add_child(AkBackdrop.new())
 
-	var title := Label.new()
-	title.text = "主 神 空 间"
-	title.add_theme_font_size_override("font_size", 32)
-	title.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	title.offset_top = 16
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	add_child(title)
+	# 顶部标题栏：编号 ─ 名称 + 英文标注；奖励点靠右（方舟式顶栏）
+	var head := HBoxContainer.new()
+	head.position = Vector2(50, 14)
+	head.add_theme_constant_override("separation", 12)
+	add_child(head)
+	head.add_child(AkTheme.dim("01", 26, AkTheme.ACCENT))
+	var head_bar := ColorRect.new()
+	head_bar.color = AkTheme.ACCENT
+	head_bar.custom_minimum_size = Vector2(3, 24)
+	head_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	head.add_child(head_bar)
+	head.add_child(AkTheme.title("主神空间", 26))
+	var head_en := AkTheme.dim(AkTheme.spaced("GODSPACE TERMINAL", 1), AkTheme.FS_TINY, AkTheme.TEXT_FAINT)
+	head_en.size_flags_vertical = Control.SIZE_SHRINK_END
+	head.add_child(head_en)
 
 	_pts_label = Label.new()
-	_pts_label.add_theme_font_size_override("font_size", 18)
+	_pts_label.add_theme_font_size_override("font_size", 20)
+	_pts_label.add_theme_color_override("font_color", AkTheme.AMBER)
 	_pts_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	_pts_label.offset_top = 62
-	_pts_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_pts_label.offset_right = -50
+	_pts_label.offset_top = 20
+	_pts_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	add_child(_pts_label)
+
+	var head_rule := ColorRect.new()
+	head_rule.color = AkTheme.LINE
+	head_rule.position = Vector2(50, 52)
+	head_rule.size = Vector2(1180, 1)
+	add_child(head_rule)
 
 	var cols := HBoxContainer.new()
 	cols.set_anchors_preset(Control.PRESET_FULL_RECT)
 	cols.offset_left = 50
 	cols.offset_right = -50
-	cols.offset_top = 96
-	cols.offset_bottom = -64
-	cols.add_theme_constant_override("separation", 24)
+	cols.offset_top = 68
+	cols.offset_bottom = -62
+	cols.add_theme_constant_override("separation", 16)
 	add_child(cols)
 
 	# 左：角色
@@ -70,19 +83,27 @@ func _build() -> void:
 	add_child(bottom)
 	var back := Button.new()
 	back.text = "返回标题"
+	back.custom_minimum_size = Vector2(130, 42)
 	back.pressed.connect(func() -> void: get_tree().change_scene_to_file("res://ui/main_menu.tscn"))
 	bottom.add_child(back)
 	var blast := Button.new()
 	blast.text = "血统"
+	blast.custom_minimum_size = Vector2(110, 42)
 	blast.pressed.connect(_open_bloodlines)
 	bottom.add_child(blast)
 	var reset := Button.new()
 	reset.text = "重置存档"
+	reset.custom_minimum_size = Vector2(130, 42)
 	reset.pressed.connect(_confirm_reset)
 	bottom.add_child(reset)
+	# 主行动靠右（方舟的确认键永远在右侧）
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bottom.add_child(spacer)
 	var enter := Button.new()
 	enter.text = "进入副本：惊变公寓"
-	enter.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	enter.custom_minimum_size = Vector2(340, 42)
+	enter.add_theme_color_override("font_color", AkTheme.AMBER)
 	enter.pressed.connect(_enter_scenario)
 	bottom.add_child(enter)
 
@@ -95,9 +116,13 @@ func _open_bloodlines() -> void:
 	)
 
 func _build_char_col() -> Control:
-	var panel := PanelContainer.new()
+	var panel := AkFrame.new()
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	panel.custom_minimum_size = Vector2(0, 0)
+	panel.cut = 18.0
+	panel.add_theme_constant_override("margin_left", 18)
+	panel.add_theme_constant_override("margin_right", 18)
+	panel.add_theme_constant_override("margin_top", 16)
+	panel.add_theme_constant_override("margin_bottom", 16)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 8)
 	panel.add_child(v)
@@ -119,8 +144,13 @@ func _build_char_col() -> Control:
 	return panel
 
 func _build_scenario_col() -> Control:
-	var panel := PanelContainer.new()
+	var panel := AkFrame.new()
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.cut = 18.0
+	panel.add_theme_constant_override("margin_left", 18)
+	panel.add_theme_constant_override("margin_right", 18)
+	panel.add_theme_constant_override("margin_top", 16)
+	panel.add_theme_constant_override("margin_bottom", 16)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 10)
 	panel.add_child(v)
@@ -151,8 +181,13 @@ func _build_scenario_col() -> Control:
 	return panel
 
 func _build_store_col() -> Control:
-	var panel := PanelContainer.new()
+	var panel := AkFrame.new()
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.cut = 18.0
+	panel.add_theme_constant_override("margin_left", 18)
+	panel.add_theme_constant_override("margin_right", 18)
+	panel.add_theme_constant_override("margin_top", 16)
+	panel.add_theme_constant_override("margin_bottom", 16)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 6)
 	panel.add_child(v)
@@ -176,10 +211,15 @@ func _refresh() -> void:
 	var lines: Array[String] = []
 	lines.append("[b]%s[/b]　%s" % [p.name, Talents.get_def(p.talent_id).get("name", "")])
 	lines.append("生命 %d/%d　意志 %d/%d" % [p.hp, p.max_hp(), p.will, p.max_will()])
+	# 属性：3 列 × 3 行（九个属性挤成一行会在窄栏里折行，很难读）
 	var at: Array[String] = []
 	for a in Attrs.ALL:
-		at.append("%s%d" % [Attrs.name_of(a), p.attr(a)])
-	lines.append("[color=#9ecbff]" + "　".join(at) + "[/color]")
+		at.append("%s %d" % [Attrs.name_of(a), p.attr(a)])
+		if at.size() == 3:
+			lines.append("[color=#9ecbff]" + "　".join(at) + "[/color]")
+			at.clear()
+	if not at.is_empty():
+		lines.append("[color=#9ecbff]" + "　".join(at) + "[/color]")
 	var sk: Array[String] = []
 	for s in Skills.ALL:
 		if p.skill(s) > 0:
