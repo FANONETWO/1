@@ -8,6 +8,8 @@ const Dialogs := preload("res://scenarios/r001_apartment/dialogs.gd")
 var _map: GridRenderer
 var _grid: GridWorld
 var _player_sprite: Node2D
+var _party_sprites: Array[Node2D] = []   # 团队模式的跟随队友（探索层不单独寻路）
+var _trail: Array[Vector2i] = []         # 玩家走过的格子，队友踩着走
 var _battle: Node = null   # 标准回合制战斗界面（BattleScene）
 var _entities: Array[Dictionary] = []   # {node, pos, kind}
 var _enemy_nodes: Dictionary = {}       # uid -> {node, def_id, hp}
@@ -119,6 +121,15 @@ func _build_world() -> void:
 		"res://assets/sprites/w1/player_idle.png")
 	_entities.append({"node": _player_sprite, "pos": Vector2i.ZERO, "kind": "player"})
 
+	# 团队模式：队友以「跟随队列」的形式出现在地图上（不单独寻路 —— 箱庭是单房间级，
+	# 四个人各自走会互相堵门，迷雾也会碎成四块）。战斗时他们才真正展开成独立单位。
+	for a in Game.allies():
+		var mate: Character = a
+		var sp := _make_entity(String(mate.name), Color(0.5, 0.85, 0.6), false, false,
+			"res://assets/sprites/w1/player_idle.png")
+		_party_sprites.append(sp)
+		_entities.append({"node": sp, "pos": Vector2i.ZERO, "kind": "ally"})
+
 	_load_room(R001Rooms.START_ROOM, Vector2i.ZERO, "")
 
 ## 载入（或切换）一个箱庭：换地图 + 重建该间的实体，玩家保留。
@@ -171,6 +182,11 @@ func _load_room(room_id: String, entry_cell: Vector2i, from_dir: String = "") ->
 		AudioManager.play("door")
 		# 只在真正「换房间」时打大字幕：刚进场那条会和新手引导弹窗叠在一起糊成一团
 		_announce_room(room_id)
+	# 队友跟着进新房间：先贴在玩家身边，等移动后自然排成队列
+	_trail.clear()
+	for sp in _party_sprites:
+		_position_entity(sp, _player_pos)
+	_sort_entities()
 	# 不同房间可能有相同坐标 → 强制重算迷雾，否则会沿用上一间的视野
 	_fog_at = Vector2i(-99, -99)
 	# 关键：刚落地时上锁，否则若出生点恰是出口格会立刻被弹到隔壁
@@ -191,7 +207,9 @@ func _clear_room_entities() -> void:
 	_spot_nodes.clear()
 	var keep: Array[Dictionary] = []
 	for e in _entities:
-		if String(e.get("kind", "")) == "player":
+		var kind := String(e.get("kind", ""))
+		# 玩家与跟队友都要跨房间保留（他们是"跟着你走的人"）
+		if kind == "player" or kind == "ally":
 			keep.append(e)
 			continue
 		var n = e.get("node")
@@ -785,7 +803,9 @@ func _move_along(path: Array, i: int) -> void:
 		return
 	var nxt: Vector2i = path[i]
 	var step := func() -> void:
+		var prev := _player_pos
 		_player_pos = nxt
+		_update_party_follow(prev)      # 队友踩着玩家刚离开的格子跟上
 		AudioManager.play_varied("step", 0.06, {"throttle": 110})
 		_refresh_sight()
 		if _check_engagement():
@@ -806,6 +826,24 @@ func _move_along(path: Array, i: int) -> void:
 	var tween := create_tween()
 	tween.tween_property(_player_sprite, "position", _map.grid_to_world(nxt) + Vector2(0, 6), 0.12)
 	tween.tween_callback(step)
+
+## 队友跟随：踩玩家走过的格子，形成队伍纵列。
+## 探索层不让他们单独寻路 —— 箱庭是单房间级，四个人各自走会互相堵门，迷雾也会碎成四块。
+func _update_party_follow(from_pos: Vector2i) -> void:
+	if _party_sprites.is_empty():
+		return
+	_trail.push_front(from_pos)
+	var want := _party_sprites.size() + 1
+	if _trail.size() > want:
+		_trail.resize(want)
+	for i in _party_sprites.size():
+		var p: Vector2i = _trail[i] if i < _trail.size() else from_pos
+		_position_entity(_party_sprites[i], p)
+		for e in _entities:
+			if e.get("node") == _party_sprites[i]:
+				e["pos"] = p
+				break
+	_sort_entities()
 
 func _try_escape() -> void:
 	if _player.inventory.has("apartment_key"):
@@ -1093,7 +1131,7 @@ func _start_combat_with(enemy_id: String, surprise: bool = false) -> void:
 	AudioManager.play_bgm("battle")
 	_battle.finished.connect(_on_battle_finished)
 	_battle._player_pos_hint = _player_pos
-	_battle.setup(self, Game.player, encounter, surprise)
+	_battle.setup(self, Game.player, encounter, surprise, Game.allies())
 	_battle.begin()
 
 ## 战斗结束：一切留在原地（这是融合的核心收益）
@@ -1173,8 +1211,11 @@ func _finish_scenario(ending: String, kill_points: int = -1) -> void:
 	var kill_pts := kill_points if kill_points >= 0 else _combat_points
 	var clue_pts := _clue_count() * 5
 	# 基础奖励必须计入合计 —— 之前漏了，结算显示「基础 +1,000」但合计只有击杀分
-	var total := (BASE_REWARD + quest_pts + kill_pts + clue_pts) if ending != "death" else 0
-	var res: Dictionary = Content.settlement(p.name, ending, _clue_count(), quest_pts, kill_pts, total)
+	var subtotal := BASE_REWARD + quest_pts + kill_pts + clue_pts
+	# 模式倍率：独狼 ×1.5（风险溢价）。死亡不结算，所以不加倍。
+	var mult := Game.reward_multiplier()
+	var total := int(round(float(subtotal) * mult)) if ending != "death" else 0
+	var res: Dictionary = Content.settlement(p.name, ending, _clue_count(), quest_pts, kill_pts, total, mult, Game.mode_name())
 	AudioManager.play_bgm("")
 	AudioManager.play("defeat" if ending == "death" else "evac")
 	EventBus.scenario_finished.emit(res)

@@ -51,7 +51,10 @@ var _player_root: Control
 var _player_hp_fill: ColorRect
 var _player_hp_text: Label
 var _player_will_text: Label
-var _slots: Array = []         # [{"root","fill","text","unit","name_label"}]
+var _slots: Array = []         # 敌方槽位：[{"root","fill","text","unit","def_id"}]
+var _player_slots: Array = []  # 玩家方槽位（p0..p3）：[{"root","fill","text","unit","keep_on_death"}]
+var _timeline_box: HBoxContainer   # 顶部行动条（未来 8 次出手）
+var _timeline_title: Label
 var _target_mark: Label
 var _fx: Control
 var _flee_success := false
@@ -59,7 +62,7 @@ var _player_pos_hint := Vector2i.ZERO   # 战斗结束后玩家的落点（由�
 
 # ——— 构建 ———
 
-func setup(host: Control, player: Character, enemies: Array, surprise: bool) -> void:
+func setup(host: Control, player: Character, enemies: Array, surprise: bool, allies: Array = []) -> void:
 	_host = host
 	_player = player
 	_surprise = surprise
@@ -69,14 +72,16 @@ func setup(host: Control, player: Character, enemies: Array, surprise: bool) -> 
 		# uid 必须原样传下去：探索层靠它把「已击杀」记进唯一状态源
 		list.append({"id": String(e["id"]), "pos": e["pos"], "uid": String(e.get("uid", ""))})
 	_cm = CombatManager.new()
-	_cm.start(_player, list, Vector2i.ZERO)
+	# allies：团队模式的队友角色卡（槽位 p1..p3）；独狼传空数组
+	_cm.start(_player, list, Vector2i.ZERO, allies)
 
 func begin() -> void:
 	_build_ui()
 	_init_blood_uses()
 	_surprise_first_strike()
 	_refresh_all()
-	start_idle_breath(_player_root)
+	for s in _player_slots:
+		start_idle_breath(s["root"])
 	for s in _slots:
 		start_idle_breath(s["root"])
 	if _surprise:
@@ -86,16 +91,15 @@ func begin() -> void:
 		_player.move_range(), _player.tactical_points(), _player.aura_range()])
 	_start_round()
 
-## 先手裁定：突袭时把玩家放到行动队列最前
+## 先手裁定（行动条款）：突袭时把玩家方的初始行动值压到全场最小，抢到第一次出手
 func _surprise_first_strike() -> void:
 	if not _surprise:
 		return
-	var pu := _cm.player_unit
-	_cm.order.sort_custom(func(a, b): return a.init > b.init)
-	var idx := _cm.order.find(pu)
-	if idx > 0:
-		_cm.order.remove_at(idx)
-		_cm.order.push_front(pu)
+	var first := INF
+	for u in _cm.units:
+		first = minf(first, u.av)
+	for pu in _cm.player_units():
+		pu.av = maxf(0.0, first - 1.0)
 
 # ——— UI 构建 ———
 
@@ -167,16 +171,14 @@ func _build_ui() -> void:
 	_turn_label.add_theme_font_size_override("font_size", 22)
 	add_child(_turn_label)
 
-	# 主角（左）
-	_player_root = _make_fighter(PIXEL_PLAYER, String(_player.name), Color(0.45, 0.95, 0.6))
-	_player_root.position = Vector2(PLAYER_X - FIGHTER_W / 2.0, GROUND - FIGHTER_H)
-	add_child(_player_root)
-	_player_hp_fill = _player_root.get_meta("fill")
-	_player_hp_text = _player_root.get_meta("hptext")
-	_player_will_text = _player_root.get_meta("will")
+	# 玩家方（左）：独狼 1 人；团队模式 4 人（自动缩小排布）
+	_build_player_slots()
 
 	# 敌人（右，纵向排列）
 	_build_enemy_slots()
+
+	# 顶部行动条（CTB）：未来 8 次出手顺序 —— 这是「能算」的前提
+	_build_timeline()
 
 	# 目标指示箭头
 	_target_mark = Label.new()
@@ -220,6 +222,7 @@ func _build_ui() -> void:
 		["物品", _on_cmd_item],
 		["防御", _on_cmd_defend],
 		["意志", _on_cmd_will],
+		["战术", _on_cmd_tactic],
 		["快进", func(): toggle_speed()],
 		["逃跑", _on_cmd_flee],
 	]:
@@ -332,26 +335,99 @@ func _build_enemy_slots() -> void:
 			"unit": u, "def_id": def_id,
 		})
 
+## 玩家方槽位：独狼 1 人；团队模式 4 人 —— 人多就整体缩小横向排开，
+## 保证每个人的血条都能看见（出手顺序另外在顶部行动条上列出来）。
+func _build_player_slots() -> void:
+	_player_slots.clear()
+	var punits: Array = []
+	for u in _cm.units:
+		if u.is_player:
+			punits.append(u)
+	var n := maxi(1, punits.size())
+	var s := 1.0
+	if n == 2:
+		s = 0.68
+	elif n >= 3:
+		s = 0.54
+	var gap := FIGHTER_W * s * 0.84
+	var x0 := PLAYER_X - FIGHTER_W * s * 0.5 - gap * float(n - 1) * 0.5
+	for i in n:
+		var u: CombatUnit = punits[i]
+		var root := _make_fighter(PIXEL_PLAYER, u.name, Color(0.45, 0.95, 0.6))
+		root.scale = Vector2(s, s)
+		# 上下错开一点，避免几个人像贴纸一样平铺
+		root.position = Vector2(x0 + gap * float(i), GROUND - FIGHTER_H * s - float(i % 2) * 16.0)
+		add_child(root)
+		_player_slots.append({
+			"root": root, "fill": root.get_meta("fill"), "text": root.get_meta("hptext"),
+			"unit": u, "keep_on_death": true,
+		})
+		if i == 0:
+			_player_root = root
+			_player_hp_fill = root.get_meta("fill")
+			_player_hp_text = root.get_meta("hptext")
+			_player_will_text = root.get_meta("will")
+
+## 顶部行动条：把未来 8 次出手摊开给玩家看 —— 能预判，才有策略
+func _build_timeline() -> void:
+	var panel := PanelContainer.new()
+	panel.position = Vector2(VW * 0.5 - 300.0, 10.0)
+	panel.custom_minimum_size = Vector2(600, 68)
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(panel)
+	var v := VBoxContainer.new()
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_child(v)
+	_timeline_title = Label.new()
+	_timeline_title.add_theme_font_size_override("font_size", 12)
+	_timeline_title.modulate = Color(1, 1, 1, 0.62)
+	_timeline_title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	v.add_child(_timeline_title)
+	_timeline_box = HBoxContainer.new()
+	_timeline_box.add_theme_constant_override("separation", 5)
+	_timeline_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	v.add_child(_timeline_box)
+
+## 重画行动条。内容必须与 advance_timeline() 的实际顺序一致，否则就是在骗玩家。
+func _refresh_timeline() -> void:
+	if _timeline_box == null or _cm == null:
+		return
+	if _timeline_title != null:
+		_timeline_title.text = "行动顺序　｜　指挥点 %d（战术：抢手 / 压制）" % _cm.command_points()
+	for c in _timeline_box.get_children():
+		c.queue_free()
+	var future := _cm.timeline(8)
+	for i in future.size():
+		var u: CombatUnit = future[i]
+		var card := PanelContainer.new()
+		card.custom_minimum_size = Vector2(70, 40)
+		card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var sb := StyleBoxFlat.new()
+		if i == 0:
+			sb.bg_color = Color(0.85, 0.72, 0.25, 0.95)     # 下一个出手：金色
+		elif u.is_player:
+			sb.bg_color = Color(0.15, 0.38, 0.55, 0.95)     # 我方：青蓝
+		else:
+			sb.bg_color = Color(0.45, 0.16, 0.16, 0.95)     # 敌方：暗红
+		sb.set_corner_radius_all(3)
+		card.add_theme_stylebox_override("panel", sb)
+		var lb := Label.new()
+		lb.text = "%d %s" % [i + 1, u.name.substr(0, 3)]
+		lb.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lb.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		lb.add_theme_font_size_override("font_size", 13)
+		lb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		card.add_child(lb)
+		_timeline_box.add_child(card)
+
 # ——— 回合流 ———
 
+## 战斗开场：给提示 + 第一次推进（不再构建整轮队列）
 func _start_round() -> void:
 	if _over:
 		return
-	_round += 1
+	_round = _cm.round_now()
 	_turn_label.text = "第 %d 回合" % _round
-	_defending = false
-	_will_used_round = false
-	_cm.begin_round()   # 防御姿态过期 + 处变不惊首击减伤每回合重置
-	_queue.clear()
-	var sorted := _cm.order.duplicate()
-	sorted.sort_custom(func(a, b): return a.init > b.init)
-	for u in sorted:
-		_queue.append(u)
-	_qi = 0
-	DebugLog.ev("turn", "新回合", {
-		"round": _round, "order": _cm.order.size(), "queue": _queue.size(),
-		"has_player": _queue.any(func(x): return x.is_player),
-	})
 	_refresh_all()
 	_log_line("[color=#8cd8ff]—— 第 %d 回合 ——[/color]" % _round)
 	_next_actor()
@@ -359,48 +435,72 @@ func _start_round() -> void:
 func _next_actor() -> void:
 	if _check_over():
 		return
-	DebugLog.ev("turn", "取下一个行动者", {"qi": _qi, "queue": _queue.size(), "round": _round})
-	if _qi >= _queue.size():
-		_start_round()
+	# 行动条：取行动值最小者出手，并把它推到下一次出手的位置
+	var u := _cm.advance_timeline()
+	if u == null:
 		return
-	var u: CombatUnit = _queue[_qi]
-	_qi += 1
-	if u.hp <= 0:
-		_next_actor()
-		return
+	DebugLog.ev("turn", "行动条取人", {"who": u.name, "av": u.av, "rounds": u.rounds_taken})
+	# 回合推进：最慢的人都动过一次了 → 按回合重置的资源在这里刷新
+	var r := _cm.round_now()
+	if r != _round:
+		_round = r
+		_turn_label.text = "第 %d 回合" % _round
+		_cm.begin_round()
+		_log_line("[color=#8cd8ff]—— 第 %d 回合 ——[/color]" % _round)
 	# 关键：把「现在轮到谁」同步给 CM，并给该单位重置 AP + 清防御姿态。
 	# 少了这两行，玩家的 6 点 AP 用完就再也不恢复（表现为「怎么打都打不动」），
 	# cm.is_player_turn() 也会永远停在初始值上。
 	_cm.set_current(u)
 	_cm.begin_unit_turn(u)
 	_refresh_all()
-	if u.is_player:
+	# 单机：只有 p0 由玩家操作；p1..p3 走 AI（联机时这些槽位换成真人输入）
+	if u.is_player and u.slot == 0:
+		# 「每回合一次」的资源按**自己的回合**算：行动条下全局回合会被快的人多动打乱
+		_will_used_round = false
+		_defending = false
 		_phase = "input"
 		_check_unstable_before_input()
 	else:
 		_phase = "anim"
-		_enemy_act(u)
+		_ai_act(u)
 
-func _enemy_act(u: CombatUnit) -> void:
-	DebugLog.ev("turn", "敌人行动开始", {"who": u.name, "hp": u.hp})
+## AI 行动：**敌人与队友共用同一条路**。
+## 敌人打「最近的玩家单位」（团队模式下前排真的能替人挡刀），队友打「最近的敌人」。
+func _ai_act(u: CombatUnit) -> void:
+	DebugLog.ev("turn", "AI 行动开始", {"who": u.name, "side": "player" if u.is_player else "enemy", "hp": u.hp})
 	await _wait(0.45)
 	if _over:
 		return
-	var target := _cm.player_unit
+	var target: CombatUnit = _nearest_enemy_of(u) if u.is_player else _cm._nearest_player(u)
+	if target == null:
+		await _wait(0.25)
+		_next_actor()
+		return
 	var res := _cm.resolve_attack(u, target)
-	DebugLog.ev("turn", "敌人行动结算", {"who": u.name, "target_hp": target.hp, "res": res})
+	DebugLog.ev("turn", "AI 行动结算", {"who": u.name, "target": target.name, "target_hp": target.hp, "res": res})
 	await _play_strike(u, target, res)
-	DebugLog.ev("turn", "敌人演出结束", {"who": u.name})
 	# 战斗单位是权威，直接同步回角色卡。
 	# 原来写的是 mini(_player.hp, target.hp) —— 取较小值会把吃药回的血夹回旧值，
 	# 表现就是「连吃四个急救包血还在掉」。
 	_apply_player_hp()
 	_refresh_all()
-	if target.hp <= 0:
-		_finish(false)
+	if _check_over():
 		return
 	await _wait(0.35)
 	_next_actor()
+
+## 队友 AI 的目标：最近的敌人
+func _nearest_enemy_of(u: CombatUnit) -> CombatUnit:
+	var best: CombatUnit = null
+	var bd := 999999
+	for e in _cm.units:
+		if e.is_player or e.hp <= 0:
+			continue
+		var d := absi(e.pos.x - u.pos.x) + absi(e.pos.y - u.pos.y)
+		if d < bd:
+			bd = d
+			best = e
+	return best
 
 ## 玩家行动完成 → 下一个
 func _advance() -> void:
@@ -692,6 +792,50 @@ func _on_cmd_defend() -> void:
 	_log_line("[color=#8cd8ff]你摆出防御姿态（防御 +2，直到下回合）。[/color]")
 	_advance()
 
+## 战术干预：花指挥点改变行动条顺序 —— 「抢手」让自己提前，「压制」把敌人推后。
+## 这是「智力」在战棋里的出口，也是团队模式最能体现配合的地方。
+func _on_cmd_tactic() -> void:
+	_clear_sub()
+	_cmd_box.visible = false
+	var pu := _cm.player_unit
+	if pu == null or pu.tactical <= 0:
+		AudioManager.play("ui_deny")
+		_log_line("[color=#ffb3b3]指挥点已用完（指挥点 = 智力/2；团队模式另有协作加成）。[/color]")
+		_show_commands()
+		return
+	_sub_box.visible = true
+	var tip := Label.new()
+	tip.text = "战术干预（剩余指挥点 %d）" % pu.tactical
+	tip.add_theme_font_size_override("font_size", 15)
+	_sub_box.add_child(tip)
+	_add_sub_button("抢手：自己提前出手（行动值 −220）", func() -> void:
+		_clear_sub()
+		_do_tactic("rush", pu))
+	_add_sub_button("压制：指定敌人延后出手（行动值 +220）", func() -> void:
+		_clear_sub()
+		_pick_target("压制谁？", _alive_enemies(), func(t: CombatUnit) -> void:
+			_do_tactic("suppress", t)))
+	_add_sub_button("返回", func() -> void:
+		_clear_sub()
+		_show_commands())
+
+func _do_tactic(kind: String, target: CombatUnit) -> void:
+	var ok := false
+	if kind == "rush":
+		ok = _cm.tactic_rush(target)
+	else:
+		ok = _cm.tactic_suppress(target)
+	AudioManager.play("ui_confirm" if ok else "ui_deny")
+	if not ok:
+		_log_line("[color=#ffb3b3]指挥点不足，干预失败。[/color]")
+	else:
+		var n := _cm.logs.size()
+		if n > 0:
+			_log_line("[color=#ffd75e]%s[/color]" % String(_cm.logs[n - 1]))
+	_refresh_all()
+	# 干预会结束本次行动：时间轴重新排队 —— 所以「抢手」有可能让你抢到下一次出手
+	_advance()
+
 func _on_cmd_flee() -> void:
 	_clear_sub()
 	_cmd_box.visible = false
@@ -711,8 +855,10 @@ func _on_cmd_flee() -> void:
 # ——— 演出 ———
 
 func _node_of(u: CombatUnit) -> Control:
-	if u.is_player:
-		return _player_root
+	# 玩家方走 _player_slots（团队模式有 4 个），敌方走 _slots
+	for s in _player_slots:
+		if s["unit"] == u:
+			return s["root"]
 	for s in _slots:
 		if s["unit"] == u:
 			return s["root"]
@@ -978,6 +1124,10 @@ func _apply_player_hp() -> void:
 	if pu != null:
 		_player.hp = pu.hp
 		DebugLog.ev("hp_sync", "战斗单位 → 角色卡", {"unit": pu.hp, "char": _player.hp, "max": pu.max_hp})
+	# 团队模式：队友的血同样要回写，否则打完一场队友受的伤不会保存
+	for u in _cm.units:
+		if u.is_player and u.slot != 0 and u.char_ref != null:
+			u.char_ref.hp = maxi(0, u.hp)
 
 func _refresh_all() -> void:
 	var pu := _cm.player_unit
@@ -994,17 +1144,30 @@ func _refresh_all() -> void:
 		if _player_root.has_meta("tex"):
 			var tex: TextureRect = _player_root.get_meta("tex")
 			tex.modulate = Color(1, 1, 1) if _phase != "anim" else Color(1.2, 1.2, 1.2)
+	# 团队模式：队友的血条（p0 已在上面单独更新，避免两套逻辑打架）
+	for s in _player_slots:
+		var au: CombatUnit = s["unit"]
+		if au.slot == 0:
+			continue
+		_update_hp_bar(s, au)
 	for s in _slots:
-		var u: CombatUnit = s["unit"]
-		var ratio2 := 0.0
-		if u.max_hp > 0:
-			ratio2 = clampf(float(maxi(u.hp, 0)) / float(u.max_hp), 0.0, 1.0)
-		var want2 := Vector2(178.0 * ratio2, 12)
-		if absf(s["fill"].size.x - want2.x) > 0.5:
-			var twp2 := create_tween()
-			twp2.tween_property(s["fill"], "size", want2, 0.22)
-		s["text"].text = "%d / %d" % [maxi(u.hp, 0), u.max_hp]
-		if u.hp <= 0:
+		_update_hp_bar(s, s["unit"])
+	_refresh_timeline()
+
+## 血条刷新（玩家槽位与敌人槽位共用）
+func _update_hp_bar(s: Dictionary, u: CombatUnit) -> void:
+	var ratio := 0.0
+	if u.max_hp > 0:
+		ratio = clampf(float(maxi(u.hp, 0)) / float(u.max_hp), 0.0, 1.0)
+	var want := Vector2(178.0 * ratio, 12)
+	if absf(s["fill"].size.x - want.x) > 0.5:
+		var tw := create_tween()
+		tw.tween_property(s["fill"], "size", want, 0.22)
+	s["text"].text = "%d / %d" % [maxi(u.hp, 0), u.max_hp]
+	if u.hp <= 0:
+		if bool(s.get("keep_on_death", false)):
+			s["root"].modulate = Color(0.45, 0.45, 0.5, 0.85)   # 自己人倒下：留个灰影
+		else:
 			s["root"].visible = false
 
 func _init_blood_uses() -> void:
@@ -1034,7 +1197,8 @@ func _check_unstable_before_input() -> void:
 func _check_over() -> bool:
 	if _over:
 		return true
-	if _cm.player_unit != null and _cm.player_unit.hp <= 0:
+	# 团队模式：玩家方只要有一个人还站着，战斗就继续（不是「p0 倒下即失败」）
+	if _cm.player_units().is_empty():
 		_finish(false)
 		return true
 	if _alive_enemies().is_empty():

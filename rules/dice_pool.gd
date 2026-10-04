@@ -8,7 +8,10 @@ extends RefCounted
 ## 5) 技能 0 级惩罚：生理 -1 成功，心智自动失败，互动 -2 成功
 ## 6) 与 DC 比较：总成功数 ≥ DC 即通过
 
-static func roll(attr_value: int, skill_value: int, extra_dice: int = 0, extra_success: int = 0, skill_id: String = "") -> Dictionary:
+## rng：留出的**权威随机源**接口。
+## 单机与测试传 null（走全局随机）；联机时由主机传入同一个 RandomNumberGenerator，
+## 或干脆由主机掷骰后广播结果 —— 否则两端骰面不一致，判定会当场打架。
+static func roll(attr_value: int, skill_value: int, extra_dice: int = 0, extra_success: int = 0, skill_id: String = "", rng: RandomNumberGenerator = null) -> Dictionary:
 	# 心智系技能 0 级：无法判定，自动失败
 	if skill_id != "" and skill_value <= 0 and Skills.CATEGORY.get(skill_id, "") == "心智":
 		return {"total": 0, "dice": 0, "rolls": [], "successes": 0, "bonus": 0, "bonus_void": false, "failed_zero": true}
@@ -17,7 +20,7 @@ static func roll(attr_value: int, skill_value: int, extra_dice: int = 0, extra_s
 	var successes := 0
 	var rolls: Array[int] = []
 	for i in dp:
-		successes += _roll_stream(rolls)
+		successes += _roll_stream(rolls, rng)
 
 	var bonus := 0
 	# 技能 0 级惩罚
@@ -40,14 +43,20 @@ static func roll(attr_value: int, skill_value: int, extra_dice: int = 0, extra_s
 	}
 
 ## 掷一个骰流：≥8 成功；10 则递归加骰。
-static func _roll_stream(rolls: Array) -> int:
-	var v := randi_range(1, 10)
+static func _roll_stream(rolls: Array, rng: RandomNumberGenerator = null) -> int:
+	var v := _d10(rng)
 	rolls.append(v)
 	var s := 1 if v >= 8 else 0
 	if v == 10:
-		s += _roll_stream(rolls)
+		s += _roll_stream(rolls, rng)
 	return s
 
+## 单骰 D10：有权威随机源就用它，否则走全局随机
+static func _d10(rng: RandomNumberGenerator = null) -> int:
+	if rng != null:
+		return rng.randi_range(1, 10)
+	return randi_range(1, 10)
+
 ## 先攻判定：d10 + 敏捷 + 沉着 + 额外加值（规则书先攻由骰池决定，切片简化单骰）。
-static func roll_initiative(dex_value: int, com_value: int, flat_bonus: int = 0) -> int:
-	return randi_range(1, 10) + dex_value + com_value + flat_bonus
+static func roll_initiative(dex_value: int, com_value: int, flat_bonus: int = 0, rng: RandomNumberGenerator = null) -> int:
+	return _d10(rng) + dex_value + com_value + flat_bonus

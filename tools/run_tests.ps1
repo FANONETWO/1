@@ -32,7 +32,7 @@ if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Force -Path $LogDi
 $units = @(
 	"dice_test", "combat_test", "content_test", "world_test",
 	"bloodline_test", "bloodline_combat_test", "bloodline_mitigation_test",
-	"attr_redesign_test", "los_test", "rooms_test"
+	"attr_redesign_test", "los_test", "rooms_test", "action_bar_test"
 )
 # 场景测试：`.tscn` 跑（有 autoload，端到端）
 $scenes = @(
@@ -41,7 +41,7 @@ $scenes = @(
 	"combat_return_test", "item_heal_test", "bloodline_live_test",
 	"bloodline_skill_test", "room_walk_test", "stealth_test", "stealth_engage_test",
 	"noise_test", "patrol_test", "persist_test", "flee_test", "pace_test",
-	"audio_test", "ux_test"
+	"audio_test", "ux_test", "mode_test", "team_battle_test"
 )
 
 $results = @()

@@ -28,11 +28,20 @@ var will_focus: bool = false    # 专注：下次攻击 +1 成功
 var will_dodge: bool = false    # 闪避：抵消一次命中
 var has_acted: bool = false      # 本场战斗是否已行动过（首轮未行动者处于措手不及）
 
+# ——— 行动条（CTB 行动值模型）———
+var speed: int = 5           # 行动速度：越高，每次行动后加的行动值越少 → 出手越频繁
+var av: float = 0.0          # 行动值（Action Value）：越小越先行动
+var rounds_taken: int = 0    # 自己行动过几次；「第几回合」= 所有存活单位里最慢的那个 + 1
+var tactical: int = 0        # 指挥点（玩家方共享池；独狼时就是自己的智力/2）
+var slot: int = -1           # 玩家方槽位 0..3（敌人为 -1）—— 团队模式的稳定 id，不要用数组下标
+
 var char_ref: Character = null   # 玩家单位引用（用于天赋/基因锁）
 
-static func from_player(c: Character) -> CombatUnit:
+## p_slot：玩家方槽位。p0 = 玩家本人（uid 保持 "player" 以兼容旧逻辑），p1..p3 = 队友。
+static func from_player(c: Character, p_slot: int = 0) -> CombatUnit:
 	var u := CombatUnit.new()
-	u.uid = "player"
+	u.uid = "player" if p_slot == 0 else "p%d" % p_slot
+	u.slot = p_slot
 	u.name = c.name
 	u.is_player = true
 	u.char_ref = c
@@ -42,6 +51,11 @@ static func from_player(c: Character) -> CombatUnit:
 	u.defense = c.defense()
 	u.init = DicePool.roll_initiative(c.attr("dex"), c.attr("com"))
 	u.move = 4
+	# 行动条：速度 = 敏捷为主 + 沉着为辅 + 2 基数（常人落在 5~7）。
+	# 这样敏捷从「只管移动力与防御」升级为出手频率，沉着也不只是先攻。
+	u.speed = c.attr("dex") + int(c.attr("com") / 2) + 2
+	# 指挥点：智力/2（属性重做方案里「看穿弱点」的战棋出口），由 CombatManager 汇总为共享池
+	u.tactical = int(c.attr("int") / 2)
 	var w := c.weapon_def()
 	if w.get("skill", "") == "gun":
 		u.ranged = true
@@ -63,6 +77,8 @@ static func from_enemy(eid: String, pos: Vector2i, uid_override: String = "") ->
 	u.max_hp = u.hp
 	u.defense = int(d.get("defense", 3))
 	u.init = DicePool.roll_initiative(int(d.get("init", 3)), 0)
+	# 行动条：数据表 speed 优先；缺省由先攻折算（敌人 init 3~8 → speed 4~7）
+	u.speed = int(d.get("speed", 3 + int(d.get("init", 3)) / 2))
 	u.dp_attack = int(d.get("dp_attack", 5))
 	u.damage_bonus = int(d.get("damage_bonus", 1))
 	u.move = int(d.get("move", 3))

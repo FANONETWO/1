@@ -43,17 +43,22 @@ const BOSS_LINES := [
 ]
 
 ## 结算：按结局与实绩生成奖励与文案。主神只报结果，不评价。
-static func settlement(player_name: String, ending_id: String, clues_found: int, quest_rewards: int, kill_rewards: int, total_points: int) -> Dictionary:
+## mode_mult / mode_name：独狼的 ×1.5 是**风险溢价**（没有队友分摊风险），
+## 必须在结算里写明白 —— 否则团队玩家会以为自己的努力被折价了。
+static func settlement(player_name: String, ending_id: String, clues_found: int, quest_rewards: int, kill_rewards: int, total_points: int, mode_mult: float = 1.0, mode_name: String = "独狼") -> Dictionary:
 	var title := String(ENDING_NAMES.get(ending_id, ending_id))
+	var mode_line := "\n【模式】%s" % mode_name
+	if mode_mult > 1.001:
+		mode_line += "　风险溢价 ×%.1f" % mode_mult
 	var body := ""
 	var cleared := false
 	match ending_id:
 		"perfect":
 			cleared = true
-			body = "你推开消防门。外面天开始亮了。\n街道很空，几辆军车停在路口，车灯还亮着，一个人都没有。\n\n母亲抱着孩子从门里出来，站在路中间，回头看了一眼那栋楼。\n她问你：「外面那些人……是来救我们的吗？」\n（你没有回答。）\n\n【任务完成】\n存活率 12%%\n基础 +1,000　支线 +%d　击杀 +%d　线索 +%d\n合计 +%d 点" % [quest_rewards, kill_rewards, clues_found * 5, total_points]
+			body = "你推开消防门。外面天开始亮了。\n街道很空，几辆军车停在路口，车灯还亮着，一个人都没有。\n\n母亲抱着孩子从门里出来，站在路中间，回头看了一眼那栋楼。\n她问你：「外面那些人……是来救我们的吗？」\n（你没有回答。）\n\n【任务完成】\n存活率 12%%\n基础 +1,000　支线 +%d　击杀 +%d　线索 +%d\n合计 +%d 点%s" % [quest_rewards, kill_rewards, clues_found * 5, total_points, mode_line]
 		"normal":
 			cleared = true
-			body = "你一个人从消防梯绕了出来。\n身后那栋楼的灯还亮着 —— 四楼的窗亮着。\n\n【任务完成】\n存活率 12%%\n基础 +1,000　支线 +%d　击杀 +%d　线索 +%d\n合计 +%d 点" % [quest_rewards, kill_rewards, clues_found * 5, total_points]
+			body = "你一个人从消防梯绕了出来。\n身后那栋楼的灯还亮着 —— 四楼的窗亮着。\n\n【任务完成】\n存活率 12%%\n基础 +1,000　支线 +%d　击杀 +%d　线索 +%d\n合计 +%d 点%s" % [quest_rewards, kill_rewards, clues_found * 5, total_points, mode_line]
 		"death":
 			cleared = false
 			body = "视野变黑。\n\n【任务失败】\n轮回者已回收。\n评价：D\n是否重来？"

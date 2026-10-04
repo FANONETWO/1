@@ -16,7 +16,10 @@ var _attr_summary: Label
 var _skill_summary: Label
 var _talent_summary: Label
 var _confirm: Button
-var _hint: Label          # 底部状态说明：告诉玩家确认按钮为什么是灰的（E1）
+var _hint: Label                  # 底部状态说明：告诉玩家确认按钮为什么是灰的（E1）
+var _mode: StringName = &"solo"   # 游戏模式：solo / team
+var _mode_btns: Dictionary = {}   # mode -> Button
+var _mode_hint: Label
 
 func _ready() -> void:
 	theme = PixelTheme.build()
@@ -77,11 +80,41 @@ func _ready() -> void:
 	bottom.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	bottom.offset_left = 200
 	bottom.offset_right = -200
-	bottom.offset_bottom = -14
-	bottom.offset_top = -56
+	bottom.offset_bottom = -30
+	bottom.offset_top = -70
 	bottom.alignment = BoxContainer.ALIGNMENT_CENTER
 	bottom.add_theme_constant_override("separation", 20)
 	add_child(bottom)
+
+	# 游戏模式：独狼（风险溢价 ×1.5）／ 四人小队（带 3 名预设队友，标准奖励）
+	var mode_row := HBoxContainer.new()
+	mode_row.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	mode_row.offset_left = 200
+	mode_row.offset_right = -200
+	mode_row.offset_top = -128
+	mode_row.offset_bottom = -94
+	mode_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	mode_row.add_theme_constant_override("separation", 12)
+	add_child(mode_row)
+	var mode_lb := Label.new()
+	mode_lb.text = "游戏模式："
+	mode_row.add_child(mode_lb)
+	for spec in [[Game.MODE_SOLO, "独狼（奖励 ×1.5）"], [Game.MODE_TEAM, "四人小队（标准奖励）"]]:
+		var mb := Button.new()
+		mb.text = String(spec[1])
+		mb.toggle_mode = true
+		mb.custom_minimum_size = Vector2(216, 34)
+		mb.pressed.connect(_set_mode.bind(spec[0]))
+		mode_row.add_child(mb)
+		_mode_btns[spec[0]] = mb
+	_mode_hint = Label.new()
+	_mode_hint.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	_mode_hint.offset_top = -92
+	_mode_hint.offset_bottom = -76
+	_mode_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_mode_hint.add_theme_font_size_override("font_size", 13)
+	_mode_hint.modulate = Color(1, 1, 1, 0.72)
+	add_child(_mode_hint)
 	var back := Button.new()
 	back.text = "返回"
 	back.pressed.connect(func() -> void:
@@ -101,8 +134,8 @@ func _ready() -> void:
 	bottom.add_child(_confirm)
 	_hint = Label.new()
 	_hint.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	_hint.offset_top = -50
-	_hint.offset_bottom = -26
+	_hint.offset_top = -28
+	_hint.offset_bottom = -8
 	_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_hint.add_theme_font_size_override("font_size", 13)
 	add_child(_hint)
@@ -335,6 +368,7 @@ func _refresh() -> void:
 			_hint.modulate = Color(1.0, 0.78, 0.42)
 	_confirm.disabled = not blocking.is_empty()
 	_confirm.tooltip_text = "" if blocking.is_empty() else _hint.text
+	_refresh_mode()
 
 ## 是否还有买得起的属性提升
 func _has_affordable_attr() -> bool:
@@ -383,6 +417,22 @@ func _apply_recommended() -> void:
 		_name_edit.text = "幸存者"
 	_refresh()
 
+# ——— 游戏模式 ———
+
+func _set_mode(m: StringName) -> void:
+	_mode = Game.MODE_TEAM if m == Game.MODE_TEAM else Game.MODE_SOLO
+	_refresh_mode()
+
+func _refresh_mode() -> void:
+	for k in _mode_btns:
+		(_mode_btns[k] as Button).button_pressed = (StringName(k) == _mode)
+	if _mode_hint == null:
+		return
+	if _mode == Game.MODE_TEAM:
+		_mode_hint.text = "四人小队：带 3 名预设队友（铁闸 / 快刀 / 药箱），奖励标准。\n他们速度各不相同 —— 战斗的行动条上你会看到四个人的出手顺序交错。"
+	else:
+		_mode_hint.text = "独狼：一个人下副本，奖励点 ×1.5（风险溢价 —— 没人替你分摊风险、没人来救你）。"
+
 func _confirm_create() -> void:
 	var c := Character.create_default()
 	c.name = _name_edit.text.strip_edges()
@@ -399,4 +449,7 @@ func _confirm_create() -> void:
 	c.will = c.max_will()
 	Game.new_game()
 	Game.set_player(c)
+	Game.set_mode(_mode)
+	# 团队模式：带 3 名预设队友（铁闸 / 快刀 / 药箱）；独狼：清空队伍
+	Game.set_team(Allies.make_allies(3) if _mode == Game.MODE_TEAM else [])
 	Game.go_hub()

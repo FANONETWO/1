@@ -192,15 +192,30 @@ func _refresh() -> void:
 	lines.append("武器：%s　护甲：%s" % [Items.name_of(p.weapon) if p.weapon != "" else "无", Items.name_of(p.armor) if p.armor != "" else "无"])
 	if p.gene_lock_level >= 1:
 		lines.append("[color=#ff7a5e]基因锁 · 一阶（已觉醒）[/color]")
+	# 游戏模式与队伍（团队模式的队友在这里露脸）
+	var mode_txt := "[color=#ffd75e]模式：%s[/color]" % Game.mode_name()
+	if not Game.is_team():
+		mode_txt += "　[color=#ffb3b3]奖励 ×%.1f（风险溢价）[/color]" % Game.reward_multiplier()
+	lines.append(mode_txt)
+	var mates := Game.allies()
+	if mates.is_empty():
+		lines.append("[color=#9fe3ff]队伍：独狼[/color]")
+	else:
+		lines.append("[color=#9fe3ff]队伍（%d 人）[/color]" % (mates.size() + 1))
+		for a in mates:
+			var mc: Character = a
+			lines.append("　· %s　生命 %d/%d　速度 %d" % [
+				mc.name, mc.hp, mc.max_hp(), mc.attr("dex") + int(mc.attr("com") / 2) + 2])
 	_char_label.text = "\n".join(lines)
 
 	if _best_label:
-		var sid := &"r001_apartment"
-		if Game.best_endings.has(String(sid)):
-			var eid := String(Game.best_endings[String(sid)])
-			_best_label.text = "最佳评价：%s" % String(R001Content.ENDING_NAMES.get(eid, eid))
+		var sid := "r001_apartment"
+		# 成绩按模式分开看：独狼的 ×1.5 不会污染团队榜
+		var eid := Game.best_ending_of_mode(sid)
+		if eid != "":
+			_best_label.text = "最佳评价（%s）：%s" % [Game.mode_name(), String(R001Content.ENDING_NAMES.get(eid, eid))]
 		else:
-			_best_label.text = "尚未通关"
+			_best_label.text = "尚未通关（%s）" % Game.mode_name()
 
 	# 商店重建
 	for c in _store_vbox.get_children():

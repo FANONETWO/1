@@ -12,6 +12,10 @@ const AP_ATTACK := 3
 const AP_ITEM := 2
 const AP_DEFEND := 2
 
+# ——— 行动条（CTB 行动值模型）———
+const BASE_AV := 1000.0        # 行动值基数：一次行动后 av += BASE_AV / speed
+const TACTIC_PUSH := 220.0     # 指挥点「抢手 / 压制」改变的行动值幅度
+
 var units: Array[CombatUnit] = []
 var order: Array[CombatUnit] = []
 var first_hit_used: Dictionary = {}   # 属性重做·处变不惊：本回合已触发首击减伤的单位
@@ -25,7 +29,8 @@ var fallen: Array[CombatUnit] = []
 var logs: Array[String] = []
 var player_unit: CombatUnit
 
-func start(player: Character, enemy_list: Array[Dictionary], player_pos: Vector2i) -> void:
+## allies：团队模式的队友角色卡（槽位 p1..p3）。独狼模式传空数组即可。
+func start(player: Character, enemy_list: Array[Dictionary], player_pos: Vector2i, allies: Array = []) -> void:
 	units.clear()
 	order.clear()
 	logs.clear()
@@ -34,14 +39,25 @@ func start(player: Character, enemy_list: Array[Dictionary], player_pos: Vector2
 	fallen.clear()
 	first_hit_used.clear()
 	round = 1
-	player_unit = CombatUnit.from_player(player)
+	player_unit = CombatUnit.from_player(player, 0)
 	player_unit.pos = player_pos
 	units.append(player_unit)
+	# 队友：各自一张角色卡，槽位 p1..p3（联机时这些槽位换成真人输入，见命令层）
+	var slot := 1
+	for a in allies:
+		if a is Character:
+			var au := CombatUnit.from_player(a, slot)
+			au.pos = player_pos
+			units.append(au)
+			slot += 1
 	for e in enemy_list:
 		units.append(CombatUnit.from_enemy(String(e["id"]), e["pos"], String(e.get("uid", ""))))
 	order = units.duplicate()
 	order.sort_custom(func(a, b): return a.init > b.init)
 	turn_index = 0
+	_init_timeline()
+	# 指挥点汇总为全队共享池（团队模式才有协作加成；独狼 = 自己的智力/2）
+	player_unit.tactical = command_points_total()
 	_begin_turn(order[0])
 	_log("战斗开始。先攻：%s" % _order_names())
 
@@ -50,6 +66,131 @@ func _order_names() -> String:
 	for u in order:
 		names.append(u.name)
 	return "、".join(names)
+
+# ——— 行动条（CTB：行动值越小越先动）———
+# 规则：每个单位有一个行动值 av；每次行动后 av += BASE_AV / speed。
+# 于是速度高的人「加得少 → 轮得快」，出手更频繁；先攻只影响起手位置。
+# 「第几回合」= 所有存活单位里最慢的那个的行动次数 + 1 —— 快的人会在同一回合里多动一次。
+# 这套模型对**任意数量**的玩家单位都成立，因此团队模式（4 人）天然可用。
+
+## 初始行动值：速度决定基础间隔，先攻做微调（先攻高者起手更靠前）
+func initial_av(u: CombatUnit) -> float:
+	return BASE_AV / maxf(1.0, float(u.speed)) - float(u.init)
+
+func _init_timeline() -> void:
+	for u in units:
+		u.av = initial_av(u)
+		u.rounds_taken = 0
+
+## 玩家方存活单位（团队模式会有多个；p0 永远是玩家本人）
+func player_units() -> Array[CombatUnit]:
+	var out: Array[CombatUnit] = []
+	for u in units:
+		if u.is_player and u.hp > 0:
+			out.append(u)
+	return out
+
+func alive_units() -> Array[CombatUnit]:
+	var out: Array[CombatUnit] = []
+	for u in units:
+		if u.hp > 0:
+			out.append(u)
+	return out
+
+## 时间轴上「下一个出手的人」：行动值最小者；同值时先攻高者优先
+func next_in_timeline() -> CombatUnit:
+	var best: CombatUnit = null
+	var best_av := INF
+	for u in alive_units():
+		if u.av < best_av - 0.001:
+			best_av = u.av
+			best = u
+		elif absf(u.av - best_av) <= 0.001 and best != null and u.init > best.init:
+			best = u
+	return best
+
+## 推进时间轴：取下一个出手者，并把它推到下一次出手的位置（null = 无人可动）
+func advance_timeline() -> CombatUnit:
+	var u := next_in_timeline()
+	if u == null:
+		return null
+	u.rounds_taken += 1
+	u.av += BASE_AV / maxf(1.0, float(u.speed))
+	return u
+
+## 预测未来 count 次出手顺序（**纯读**，绝不改状态）—— UI 的行动条就画它，
+## 而且必须与 advance_timeline() 的实际顺序一致，否则就是在骗玩家。
+func timeline(count: int) -> Array[CombatUnit]:
+	var alive := alive_units()
+	var out: Array[CombatUnit] = []
+	if alive.is_empty():
+		return out
+	var sim := {}
+	for u in alive:
+		sim[u.uid] = u.av
+	for i in count:
+		var best: CombatUnit = null
+		var best_av := INF
+		for u in alive:
+			var v: float = sim[u.uid]
+			if v < best_av - 0.001:
+				best_av = v
+				best = u
+			elif absf(v - best_av) <= 0.001 and best != null and u.init > best.init:
+				best = u
+		if best == null:
+			break
+		out.append(best)
+		sim[best.uid] = best_av + BASE_AV / maxf(1.0, float(best.speed))
+	return out
+
+## 当前回合数：最慢的存活单位的行动次数 + 1
+func round_now() -> int:
+	var alive := alive_units()
+	if alive.is_empty():
+		return round
+	var slowest := 999999
+	for u in alive:
+		slowest = mini(slowest, u.rounds_taken)
+	return slowest + 1
+
+# ——— 指挥点（团队共享池 · 智力/2 的战棋出口）———
+
+## 全队共享的指挥点总量：取队内最高智力/2（独狼 = 自己的智力/2，与旧设定一致），
+## 团队模式下每人再给 1 点协作加成 —— 人多能打的战术牌更多。
+func command_points_total() -> int:
+	var best := 0
+	var n := 0
+	for u in units:
+		if not u.is_player:
+			continue
+		n += 1
+		best = maxi(best, u.tactical)
+	if n <= 1:
+		return best
+	return best + n - 1
+
+## 当前剩余指挥点（全队共用，记在 p0 身上）
+func command_points() -> int:
+	return player_unit.tactical if player_unit != null else 0
+
+## 「抢手」：让某个玩家单位提前出手（消耗 1 指挥点）
+func tactic_rush(u: CombatUnit) -> bool:
+	if player_unit == null or player_unit.tactical <= 0 or u == null:
+		return false
+	player_unit.tactical -= 1
+	u.av = maxf(0.0, u.av - TACTIC_PUSH)
+	_log("【战术·抢手】%s 抢占先机。" % u.name)
+	return true
+
+## 「压制」：把目标推后（消耗 1 指挥点）
+func tactic_suppress(target: CombatUnit) -> bool:
+	if player_unit == null or player_unit.tactical <= 0 or target == null:
+		return false
+	player_unit.tactical -= 1
+	target.av += TACTIC_PUSH
+	_log("【战术·压制】%s 被打乱节奏，行动延后。" % target.name)
+	return true
 
 # ——— 回合控制 ———
 

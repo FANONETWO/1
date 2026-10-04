@@ -6,7 +6,17 @@ extends Node
 ## v2：引入 world_progress（每界阶段/通关/结局/线索/机制状态）、xp、team、rested。
 
 const SAVE_PATH := "user://save.json"
-const SAVE_VERSION := 2
+## v1：单副本扁平字段。v2：world_progress / xp / team。v3：游戏模式 + 成绩按模式分开。
+const SAVE_VERSION := 3
+
+# ——— 游戏模式 ———
+## solo = 独狼：一个人下副本，奖励点 ×1.5 —— 这是**风险溢价**（没有队友分摊风险、
+##        没有救援、失控了没人拦），不是「单机补偿」，结算面板要写明白。
+## team = 四人小队：标准奖励 + 三张预设队友卡（单机由 AI 接管；联机时这些槽位换成真人）。
+const MODE_SOLO := &"solo"
+const MODE_TEAM := &"team"
+const TEAM_MAX := 4                # 含玩家本人
+const SOLO_REWARD_MULT := 1.5
 
 var player: Character = null          # 轮回者（建卡后生成）
 var points: int = 0                   # 奖励点（分数）
@@ -14,7 +24,8 @@ var xp: int = 0                       # 经验值（规则书：1XP = 100 分）
 var upgrades: Array[String] = []      # 已兑换强化 id
 var cleared: Array[String] = []       # 已通关副本 id（v1 兼容字段）
 var best_endings: Dictionary = {}     # 副本id -> 结局id（v1 兼容字段）
-var team: Array = []                  # 队伍（玩家以外的出战单位，阶段 B 起启用）
+var mode: StringName = MODE_SOLO      # 游戏模式：solo / team（建卡时选，入存档）
+var team: Array = []                  # 队伍：玩家以外的队友（Character 对象，团队模式 1~3 人）
 var rested: bool = false              # 本次回到主神空间后是否已免费休整
 var player_dead: bool = false         # P4：基因崩溃导致角色永久阵亡
 var migrated_from: int = 0            # 本次读档来自哪个旧版本（0 表示无需迁移）
@@ -101,6 +112,42 @@ func set_player(c: Character) -> void:
 	player = c
 	save_game()
 
+# ——— 游戏模式 ———
+
+func set_mode(m: StringName) -> void:
+	mode = MODE_TEAM if m == MODE_TEAM else MODE_SOLO
+	save_game()
+
+func is_team() -> bool:
+	return mode == MODE_TEAM
+
+func mode_name() -> String:
+	return "四人小队" if is_team() else "独狼"
+
+## 奖励倍率：独狼 ×1.5（风险溢价：没人替你分摊风险）
+func reward_multiplier() -> float:
+	return SOLO_REWARD_MULT if mode == MODE_SOLO else 1.0
+
+## 成绩要**按模式分开记**：否则独狼的 ×1.5 会永久污染团队榜，
+## 团队玩家再怎么打也追不上，榜就废了。
+func best_key(scenario_id: String) -> String:
+	return "%s@%s" % [scenario_id, mode]
+
+## 该副本在当前模式下的最佳结局
+func best_ending_of_mode(scenario_id: String) -> String:
+	return String(best_endings.get(best_key(scenario_id), ""))
+
+## 队友（Character 对象数组；独狼为空）
+func allies() -> Array:
+	return team
+
+func set_team(list: Array) -> void:
+	team = []
+	for c in list:
+		if c is Character:
+			team.append(c)
+	save_game()
+
 func finish_scenario(result: Dictionary) -> void:
 	points += int(result.get("points", 0))
 	var sid := String(result.get("scenario_id", ""))
@@ -109,8 +156,9 @@ func finish_scenario(result: Dictionary) -> void:
 		cleared.append(sid)
 	var eid := String(result.get("ending_id", ""))
 	if sid != "" and eid != "":
-		if not best_endings.has(sid) or _ending_rank(eid) > _ending_rank(String(best_endings[sid])):
-			best_endings[sid] = eid
+		var bk := best_key(sid)
+		if not best_endings.has(bk) or _ending_rank(eid) > _ending_rank(String(best_endings[bk])):
+			best_endings[bk] = eid
 	# 同步世界进度（v2 结构）
 	if wid != "":
 		var st := world_state(wid)
@@ -181,7 +229,8 @@ func save_game() -> void:
 		"upgrades": upgrades,
 		"cleared": cleared,
 		"best_endings": best_endings,
-		"team": team,
+		"mode": String(mode),
+		"team": team.map(func(c): return (c as Character).to_dict() if c is Character else {}),
 		"rested": rested,
 		"player_dead": player_dead,
 		"world_progress": world_progress,
@@ -208,7 +257,15 @@ func load_game() -> bool:
 	upgrades.assign(data.get("upgrades", []))
 	cleared.assign(data.get("cleared", []))
 	best_endings = data.get("best_endings", {})
-	team.assign(data.get("team", []))
+	mode = StringName(String(data.get("mode", "solo")))
+	# 队友：入档是 dict，出档还原成 Character（团队模式 1~3 人）
+	team = []
+	for td in data.get("team", []):
+		if not (td is Dictionary) or (td as Dictionary).is_empty():
+			continue
+		var tc := Character.new()
+		if tc.from_dict(td):
+			team.append(tc)
 	rested = bool(data.get("rested", false))
 	player_dead = bool(data.get("player_dead", false))
 	world_progress = data.get("world_progress", {})
@@ -231,6 +288,14 @@ func _migrate(from_version: int) -> void:
 			st["cleared"] = true
 		if best_endings.has("r001_apartment") and String(st.get("best_ending", "")) == "":
 			st["best_ending"] = String(best_endings["r001_apartment"])
+	if from_version < 3:
+		# v2 及以前没有「模式」概念，那时的成绩都属于独狼时代 → 键名补上 @solo。
+		# 注意这段必须放在 v2 迁移**之后**：v2 的检查用的还是旧键名。
+		var migrated := {}
+		for k in best_endings:
+			var key := String(k)
+			migrated[key if key.contains("@") else "%s@%s" % [key, MODE_SOLO]] = best_endings[k]
+		best_endings = migrated
 
 func go_hub() -> void:
 	get_tree().change_scene_to_file("res://ui/hub.tscn")
