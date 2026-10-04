@@ -59,7 +59,7 @@ for t in dice_test combat_test content_test world_test bloodline_test \
 		 los_test rooms_test; do
   godot --headless --path . -s res://tests/$t.gd
 done
-# 场景类见 README.md 的验证清单
+# 场景类见 docs/项目说明.md 的验证清单
 ```
 
 **验收底线：全绿才能提交。** 这个仓库的测试就是我们的回归网 ——
@@ -161,8 +161,9 @@ godot --path . res://tools/playtest/real_playthrough.tscn --quit-after 300000
 
 | 文件 | 内容 |
 |---|---|
-| `README.md` | 项目概览、目录结构、测试清单 |
-| `docs/游戏策划案.md` | 总体设计 |
+| `README.md` | 面向访客的简介、截图、快速开始 |
+| `docs/项目说明.md` | 完整技术说明：运行、玩法、验证清单、代码结构 |
+| `docs/轮回回廊_游戏策划案.md` | 总体设计 |
 | `docs/剧情大纲_惊变公寓.md` | 剧情结构（起承转合、参考片单） |
 | `docs/剧情细节_惊变公寓.md` | 文案包（对话、线索、结局） |
 | `docs/属性重设计方案.md` | 九属性与战棋出口 |
