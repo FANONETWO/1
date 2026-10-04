@@ -30,13 +30,18 @@ var _spot_nodes: Dictionary = {}
 var _player_pos: Vector2i
 var _player: Character
 var _moving := false
-const SIGHT := 3               # 敌人视野基准半径（格）；玩家的视野是 6，留出潜行空间
-## 按类型细分视野：丧尸视力差但尸犬鼻子灵 —— 玩家要按敌人种类决定怎么绕
+const SIGHT := 2               # 敌人视野基准半径（格）；玩家的视野是 6，留出潜行空间
+## 按类型细分视野：丧尸视力差但尸犬鼻子灵 —— 玩家要按敌人种类决定怎么绕。
+## ⚠️ 数值整体收过一轮：原来丧尸 3 格 + 90° 锥，「看到就开战」时等于没有潜行空间。
 const SIGHT_BY_TYPE := {
-	"walker": 3, "zombie": 3, "crawler": 4,
-	"hound": 5, "screamer": 4, "bloater": 2, "cadaver": 2, "brute": 4,
+	"walker": 2, "zombie": 2, "crawler": 3,
+	"hound": 4, "screamer": 3, "bloater": 1, "cadaver": 2, "brute": 3,
 }
 const PATROL_INTERVAL := 1.7   # 巡逻每格耗时（秒）—— 丧尸走得很慢
+## 接触距离：曼哈顿 ≤ 1 即「贴上」，只有这时才开战
+const CONTACT_DIST := 1
+## 追到最后已知位置后，连续几个回合没再看见人就放弃（所以「甩掉它」是可行的）
+const CHASE_GIVE_UP := 3
 
 func _sight_range(def_id: String) -> int:
 	return int(SIGHT_BY_TYPE.get(def_id, SIGHT))
@@ -527,7 +532,7 @@ const TUTORIAL: Array = [
 	},
 	{
 		"title": "引导 2/3 · 回合制：敌人什么时候转身",
-		"body": "你行动一次后，【所有敌人各走一步】—— 这一层是回合制，不是实时。\n\n· 空格 = 结束这一回合（原地等待/观察）。\n· 【亮红格子】= 此刻就会被看见：踩进去立刻接敌。\n· 【暗红格子】= 那个敌人的视野范围：你暂时安全，但别久留。\n· 每个敌人只看【正前方 90°】—— 绕到它背后就是突袭（你抢先手）。\n· 视野外是黑的，那是迷雾，不是画面坏了。",
+		"body": "你行动一次后，【所有敌人各走一步】—— 这一层是回合制，不是实时。\n\n· 空格 = 结束这一回合（原地等待/观察）。\n· 【亮红格子】= 现在就会被看见：踩进去它就会开始追你。\n· 【暗红格子】= 那个敌人的视野范围：暂时安全，但别在它面前晃。\n· 每个敌人只看【正前方 90°】—— 绕到它背后就是突袭（你抢先手）。\n· 被发现 ≠ 开战：它会朝你走过来，**贴到身上**才打。跑开、绕圈、换房间都能甩掉它。\n· 视野外是黑的，那是迷雾，不是画面坏了。",
 	},
 	{
 		"title": "引导 3/3 · 噪音与黑暗",
@@ -795,17 +800,85 @@ func _refresh_sight() -> void:
 	_map.show_attack_range(danger)
 	_map.show_watch_range(watch)
 
-## 走进敌人视野 → 被察觉，敌人先手
+## 更新「谁发现了你」。
+## 被发现只进入**追逐**状态，不等于开战 —— 玩家还有机会跑开、绕圈或换房间。
+## 这一步是潜行能成立的关键：看到即开战的话，潜行就变成了踩雷。
+func _update_enemy_alert() -> void:
+	for uid in _enemy_nodes:
+		var e: Dictionary = _enemy_nodes[uid]
+		if not _in_enemy_sight(String(uid)):
+			continue
+		e["last_seen"] = _player_pos
+		e["lost_turns"] = 0
+		if not bool(e.get("alerted", false)):
+			e["alerted"] = true
+			_log_line("[color=#ffd75e]%s 发现了你 —— 它在朝你过来！[/color]" % Enemies.name_of(String(e["def_id"])))
+
+## 接触判定：只有**已经发现你**的敌人贴到身上才开战。
+## 没发现你的敌人贴着你也没事 —— 那是你绕到它背后准备突袭的机会。
 func _check_engagement() -> bool:
 	if _battle != null:
 		return false
 	for uid in _enemy_nodes:
 		var e: Dictionary = _enemy_nodes[uid]
-		if _in_enemy_sight(String(uid)):
-			_log_line("[color=#ff8c66]你被 %s 发现了！[/color]" % Enemies.name_of(String(e["def_id"])))
+		if not bool(e.get("alerted", false)):
+			continue
+		if _manhattan(e["pos"], _player_pos) <= CONTACT_DIST:
+			_log_line("[color=#ff8c66]%s 抓住了你！[/color]" % Enemies.name_of(String(e["def_id"])))
 			_start_combat_with(String(e["def_id"]), false)
 			return true
 	return false
+
+## 该格是否空着（忽略自己）—— 追击寻路要用
+func _cell_free_except(p: Vector2i, uid: String) -> bool:
+	for k in _enemy_nodes:
+		if String(k) == uid:
+			continue
+		if Vector2i(_enemy_nodes[k]["pos"]) == p:
+			return false
+	for nid in _npc_nodes:
+		if Vector2i(_npc_nodes[nid]["pos"]) == p:
+			return false
+	return true
+
+## 追击一步：朝玩家（或最后看到他的位置）走一格；贴到身上就开战。
+## 追到最后已知位置还看不见人 → 数回合后放弃，回到巡逻 —— 所以「甩掉它」是可行的。
+func _chase_step(uid: String, e: Dictionary) -> void:
+	var sees := _in_enemy_sight(uid)
+	if sees:
+		e["last_seen"] = _player_pos
+		e["lost_turns"] = 0
+	else:
+		e["lost_turns"] = int(e.get("lost_turns", 0)) + 1
+	var cur: Vector2i = e["pos"]
+	# 已经贴上了：交给接触判定，不再移动
+	if _manhattan(cur, _player_pos) <= CONTACT_DIST:
+		return
+	var target: Vector2i = _player_pos if sees else Vector2i(e.get("last_seen", _player_pos))
+	if not sees and cur == target and int(e["lost_turns"]) >= CHASE_GIVE_UP:
+		e["alerted"] = false
+		e["lost_turns"] = 0
+		_log_line("[color=#8cd8ff]%s 失去了你的踪迹，重新开始游荡。[/color]" % Enemies.name_of(String(e["def_id"])))
+		return
+	var path := Pathfind.find(cur, target, func(p: Vector2i) -> bool:
+		return not _grid.is_walkable(p) or not _cell_free_except(p, uid))
+	if path.size() < 2:
+		return
+	var nxt: Vector2i = path[1]
+	if not _grid.is_walkable(nxt) or not _cell_free_except(nxt, uid):
+		return
+	e["pos"] = nxt
+	e["facing"] = nxt - cur
+	_position_entity(e["node"], nxt)
+	for ent in _entities:
+		if String(ent.get("uid", "")) == uid:
+			ent["pos"] = nxt
+			break
+	_sort_entities()
+	_refresh_sight()
+	if _manhattan(nxt, _player_pos) <= CONTACT_DIST:
+		_log_line("[color=#ff8c66]%s 抓住了你！[/color]" % Enemies.name_of(String(e["def_id"])))
+		_start_combat_with(String(e["def_id"]), false)
 
 func _move_to(g: Vector2i) -> void:
 	var path := Pathfind.find(_player_pos, g, func(p): return not _map.is_walkable(p))
@@ -829,7 +902,8 @@ func _move_along(path: Array, i: int) -> void:
 		_update_party_follow(prev)      # 队友踩着玩家刚离开的格子跟上
 		AudioManager.play_varied("step", 0.06, {"throttle": 110})
 		_refresh_sight()
-		if _check_engagement():
+		_update_enemy_alert()        # 谁看到你了（只标记追逐，不开战）
+		if _check_engagement():      # 已经发现你的敌人贴到身上才开战
 			_moving = false
 			_map.clear_path()
 			return
@@ -1486,6 +1560,12 @@ func _end_player_turn() -> void:
 		return
 	_enemy_acting = true
 	_refresh_hud()
+	# 玩家原地不动也可能被转过来的敌人发现
+	_update_enemy_alert()
+	if _check_engagement():
+		_enemy_acting = false
+		_refresh_hud()
+		return
 	await _enemy_turn()
 	_turn += 1
 	if _noise > 0:
@@ -1495,19 +1575,22 @@ func _end_player_turn() -> void:
 	if _battle == null:
 		_log_line("[color=#ffd75e]—— 第 %d 回合 · 你的行动 ——[/color]" % _turn)
 
-## 敌人回合：有巡逻路线的走一步，没路线的原地不动（房间里的都困住了）
+## 敌人回合：发现你的追过来，没发现的按巡逻路线走（没路线的原地不动）。
 func _enemy_turn() -> void:
 	var uids: Array = _enemy_nodes.keys()
 	for uid in uids:
 		if _battle != null:
-			return                       # 中途被发现就中断，交给战斗
+			return                       # 中途接敌就中断，交给战斗
 		if not _enemy_nodes.has(uid):
 			continue
 		var e: Dictionary = _enemy_nodes[uid]
-		var route: Array = e.get("patrol", [])
-		if route.is_empty():
-			continue
-		_patrol_step(String(uid), e, route)
+		if bool(e.get("alerted", false)):
+			_chase_step(String(uid), e)  # 追击：朝你（或最后已知位置）走一格，贴上就开战
+		else:
+			var route: Array = e.get("patrol", [])
+			if route.is_empty():
+				continue
+			_patrol_step(String(uid), e, route)
 		_refresh_sight()
 		if _battle != null:
 			return
@@ -1558,7 +1641,12 @@ func _refresh_hud() -> void:
 		return
 	_hud_hp.text = "生命 %d/%d" % [_player.hp, _player.max_hp()]
 	_hud_will.text = "意志 %d/%d" % [_player.will, _player.max_will()]
-	_hud_pts.text = "积分 %d　噪音 %d　回合 %d" % [Game.points, _noise, _turn]
+	var chased := 0
+	for uid in _enemy_nodes:
+		if bool(_enemy_nodes[uid].get("alerted", false)):
+			chased += 1
+	var chase_txt := "" if chased == 0 else "　⚠ %d 个在追你" % chased
+	_hud_pts.text = "积分 %d　噪音 %d　回合 %d%s" % [Game.points, _noise, _turn, chase_txt]
 	var qs: Array[String] = []
 	for qid in _quests.defs:
 		if _quests.is_active(StringName(qid)):
