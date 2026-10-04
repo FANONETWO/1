@@ -49,11 +49,11 @@
   evac       C 大调五音上行琶音 + 2093 Hz 明亮顶点铃音
   defeat     A 小调五音下行琶音 + 失谐 detune + 低通变暗 + 55 Hz 压迫低音
 
-【BGM 设计】
-  explore 20 s 阴冷稀疏：38/57/76/114 Hz 低频嗡鸣 + A 小调暗色 pad + 6 次金属碰响
-  battle  18 s 战斗紧张：A2+Bb2 小二度与 Eb3 三全音的持续 pad + 40 拍脉冲低音
-                    + 八分 hihat + snare + 三全音高音动机（失真锯齿）
-  hub     22 s 冷科幻空灵：Cmaj7#11 正弦铺底 + 每 2.75 s 一个高音钟点 + 高频 shimmer
+【BGM —— 已迁出本脚本】
+  三首 BGM（explore / battle / hub）现在由 tools/music/render_bgm.mjs 生成：
+  改用 FluidSynth 真实音源（低音弦乐 / 定音鼓 / 钟琴 / 合唱 pad），
+  素材是 MIDI 乐谱而不是波形合成，才对得上本副本的恐怖片配乐语汇。
+  本脚本从此只负责 19 个音效；BGM 的验收仍由 tools/audio/verify_audio.py 覆盖。
 
 运行： python tools/audio/gen_audio.py
 ================================================================================
@@ -101,12 +101,10 @@ SFX_SPECS = [
     ("defeat", 0.88),
 ]
 
-# (文件名, 时长秒, 随机种子)
-BGM_SPECS = [
-    ("explore", 20.0, 0xE701),
-    ("battle", 18.0, 0xBA77),
-    ("hub", 22.0, 0x40B5),
-]
+# BGM 不再由本脚本生成 —— 见 tools/music/render_bgm.mjs（FluidSynth 真实音源）。
+# 下面三个 bgm_* 合成函数与其 BUILDER 映射刻意留着：一是作为旧版听感的对照，
+# 二是万一要回退纯数学合成时有据可查。它们已不被 main() 调用。
+BGM_NAMES = ["explore", "battle", "hub"]
 
 
 # ---------------------------------------------------------------------------
@@ -902,11 +900,11 @@ def main():
         x = normalize_peak(x, SFX_PEAK_DBFS)
         pending.append((os.path.join(SFX_DIR, name + ".wav"), x, "sfx", name))
 
-    for j, (name, dur, seed) in enumerate(BGM_SPECS):
-        rng = np.random.default_rng(seed)
-        x = BGM_BUILDERS[name](dur, rng)
-        x = normalize_peak(x, BGM_PEAK_DBFS)
-        pending.append((os.path.join(BGM_DIR, name + ".wav"), x, "bgm", name))
+    # BGM 不在这里生成：它由 tools/music/render_bgm.mjs 用 FluidSynth 渲染。
+    # 只做存在性提示，免得有人以为本脚本还能产出整套资产。
+    for name in BGM_NAMES:
+        if not os.path.exists(os.path.join(BGM_DIR, name + ".wav")):
+            print("  [提示] bgm/%s.wav 不存在，请运行：node tools/music/render_bgm.mjs" % name)
 
     for path, x, kind, name in pending:
         write_wav(path, x)
@@ -937,14 +935,8 @@ def main():
     print("assets/audio 目录总大小：%.2f MB（%d 字节）—— 上限 12 MB"
           % (total / 1048576.0, total))
 
-    # BGM 首尾连续性
     print()
-    print("BGM 首尾连续性（|first - last|，16-bit 计数）：")
-    for info in bgm_infos:
-        print("  %-14s first=%-8d last=%-8d |diff|=%-6d  相对幅度=%.3e"
-              % (info["name"], info["first"], info["last"],
-                 abs(info["first"] - info["last"]),
-                 abs(info["first"] - info["last"]) / 32767.0))
+    print("BGM：已迁到 tools/music/render_bgm.mjs；无缝循环检验见 tools/audio/verify_audio.py")
 
     # 断言
     print()
@@ -956,11 +948,7 @@ def main():
             errors.append("%s 时长 %.3f s 越界（要求 0.08~1.00）" % (info["name"], info["dur"]))
         if abs(info["peak_db"] - SFX_PEAK_DBFS) > 2.0:
             errors.append("%s 峰值 %.2f dBFS 偏离目标 %.1f 超过 ±2 dB" % (info["name"], info["peak_db"], SFX_PEAK_DBFS))
-    for info in bgm_infos:
-        if not (16.0 <= info["dur"] <= 24.0):
-            errors.append("%s 时长 %.3f s 越界（要求 16~24）" % (info["name"], info["dur"]))
-        if abs(info["peak_db"] - BGM_PEAK_DBFS) > 2.0:
-            errors.append("%s 峰值 %.2f dBFS 偏离目标 %.1f 超过 ±2 dB" % (info["name"], info["peak_db"], BGM_PEAK_DBFS))
+    # BGM 由 render_bgm.mjs 生成，本脚本不再校验它（交给 tools/audio/verify_audio.py）。
 
     for info in sfx_infos + bgm_infos:
         if info["channels"] != 1 or info["sampwidth"] != 2 or info["rate"] != SR:
@@ -974,13 +962,6 @@ def main():
         if info["peak_i"] < 0.01 * 32767.0:
             errors.append("%s 峰值过低，疑似静音" % info["name"])
 
-    seam = []
-    for info in bgm_infos:
-        d = abs(info["first"] - info["last"])
-        seam.append((info["name"], d))
-        if d > 4:
-            errors.append("%s 循环首尾不连续（|first-last|=%d）" % (info["name"], d))
-
     if total > 12 * 1024 * 1024:
         errors.append("总大小 %.2f MB 超过 12 MB" % (total / 1048576.0))
 
@@ -992,10 +973,9 @@ def main():
         return 1
 
     print("  ✓ sfx 数量 %d 个，时长全部落在 0.08~1.00 s" % len(sfx_infos))
-    print("  ✓ bgm 数量 %d 个，时长全部落在 16~24 s" % len(bgm_infos))
-    print("  ✓ 峰值全部在目标 ±2 dB 内（sfx %.1f dBFS / bgm %.1f dBFS）" % (SFX_PEAK_DBFS, BGM_PEAK_DBFS))
+    print("  ✓ 峰值全部在目标 ±2 dB 内（sfx %.1f dBFS）" % SFX_PEAK_DBFS)
     print("  ✓ 无静音、无直流、无削波")
-    print("  ✓ BGM 首尾样本差最大 %d（远小于 1 LSB 量级阈值）" % max(d for _, d in seam))
+    print("  ✓ BGM 不在本脚本职责内：见 tools/music/render_bgm.mjs")
     print("  ✓ 总大小 %.2f MB ≤ 12 MB" % (total / 1048576.0))
     print("=" * 78)
     print("全部自检通过。")

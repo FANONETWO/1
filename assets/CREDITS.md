@@ -111,3 +111,49 @@
 `docs/art_reference/` 存放火纹原版战斗动画与职业卡（来自
 [fireemblem8u](https://github.com/jiangzhengwenjz/fireemblem8u) 反编译 + FE-Repo），
 **只用于研究画法**，不得打包进发布版本。
+
+---
+
+## 六、音频素材
+
+### 6.1 音效（19 个）—— 无第三方版权 ✓
+
+`assets/audio/sfx/*.wav` 由 `tools/audio/gen_audio.py` **纯数学合成**
+（正弦 / 噪声 / 包络叠加，只用 Python 标准库 + numpy）：不含任何采样、录音或第三方素材。
+**可商用，无需署名，无需 AI 披露。**
+
+### 6.2 BGM（3 首）—— 由 FluidSynth + GeneralUser GS 渲染 ⚠️ 有一处残余风险
+
+| 项 | 内容 |
+|---|---|
+| 生成器 | `tools/music/render_bgm.mjs`：MIDI 乐谱 → FluidSynth 2.4.6 (WASM) 渲染 → 22050 Hz 单声道 WAV |
+| 音源 | **GeneralUser GS v2.0.1**（`GeneralUserGS.sf3`，8.03 MB，仅缓存在开发机）|
+| 引擎 | js-synthesizer（BSD-3-Clause）内含 FluidSynth 2.4.6（LGPL-2.1）|
+| 乐谱 | 音符直接写在 `render_bgm.mjs` 里，**属本项目原创** |
+
+**许可原文要点**（[GeneralUser GS License v2.0](https://github.com/mrbumpy409/GeneralUser-GS/blob/main/documentation/LICENSE.txt)）：
+
+> "You may use GeneralUser GS **without restriction for your own music creation, private or commercial**."
+> "…all of which allow full use in music production, **including the ability to make profit
+> from musical recordings created with GeneralUser GS**."
+
+→ **这份音色库渲染出的三首 BGM，商用是被明确许可的。**
+
+**但作者本人披露了一处不确定性，必须如实登记**：
+
+> "some [samples] were taken from other banks freely (and legally) available on the Internet…
+> **I cannot be 100% sure where all of the samples originated**… This uncertainty may concern you
+> if you intend to use GeneralUser GS in a **commercial software product**."
+
+→ 即：音色库自 2000 年发布至今未收到过采样归属投诉，但作者无法为每一个采样提供完整溯源。
+**若发布前要求零残余风险**，两条替代路线（乐谱不用改）：
+
+1. 换一个溯源更干净或 **CC0** 的音色库重新渲染 ——
+   设 `DSH_MUSIC_SOUNDFONT=<新的 .sf2/.sf3>` 后重跑 `node tools/music/render_bgm.mjs` 即可；
+2. 回退到 `gen_audio.py` 里刻意保留的纯数学合成版（听感差，但零版权风险）。
+
+**两点澄清**：
+
+- FluidSynth（LGPL-2.1）与音色库**只在生成阶段使用，不进入游戏运行时** ——
+  游戏内播放的是普通 WAV，因此**不构成 LGPL 传染**，发行包内也不含这些组件。
+- BGM **不是 AI 生成**，与第二节的 Leonardo 素材性质不同，**无需在 Steam 商店页做 AI 披露**。
