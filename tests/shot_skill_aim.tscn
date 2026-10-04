@@ -1,6 +1,0 @@
-[gd_scene load_steps=2 format=3 uid="uid://shot-skill-aim"]
-
-[ext_resource type="Script" path="res://tests/shot_skill_aim.gd" id="1_aim"]
-
-[node name="ShotSkillAim" type="Control"]
-script = ExtResource("1_aim")

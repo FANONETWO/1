@@ -65,7 +65,7 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_player = Game.player
 	if _player == null:
-		get_tree().change_scene_to_file.call_deferred("res://main_menu.tscn")
+		get_tree().change_scene_to_file.call_deferred("res://ui/main_menu.tscn")
 		return
 	_quests = Quests.new([&"escape", &"save_chen", &"clear_lobby"])
 	_quests.activate_all()

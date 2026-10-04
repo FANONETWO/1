@@ -6,7 +6,7 @@ func _ready() -> void:
 	TestGuard.arm("ui_flow_driver", 45, get_tree())
 	var d := UiFlow.new()
 	get_tree().root.add_child.call_deferred(d)
-	get_tree().change_scene_to_file.call_deferred("res://main_menu.tscn")
+	get_tree().change_scene_to_file.call_deferred("res://ui/main_menu.tscn")
 
 class UiFlow:
 	extends Node

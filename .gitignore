@@ -22,6 +22,10 @@ node_modules/
 assets/raw/
 *.log
 
+# Python 工具的运行产物
+__pycache__/
+*.pyc
+
 # 本地扫描工具状态
 .mimosa/
 

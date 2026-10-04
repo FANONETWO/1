@@ -1,6 +1,0 @@
-[gd_scene load_steps=2 format=3 uid="uid://shot-anim-frames"]
-
-[ext_resource type="Script" path="res://tests/shot_anim_frames.gd" id="1_af"]
-
-[node name="ShotAnimFrames" type="Control"]
-script = ExtResource("1_af")

@@ -1,6 +1,0 @@
-[gd_scene load_steps=2 format=3 uid="uid://shot-fusion"]
-
-[ext_resource type="Script" path="res://tests/shot_fusion.gd" id="1_fus"]
-
-[node name="ShotFusion" type="Control"]
-script = ExtResource("1_fus")

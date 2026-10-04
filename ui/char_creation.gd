@@ -86,7 +86,7 @@ func _ready() -> void:
 	back.text = "返回"
 	back.pressed.connect(func() -> void:
 		AudioManager.play("ui_click")
-		get_tree().change_scene_to_file("res://main_menu.tscn"))
+		get_tree().change_scene_to_file("res://ui/main_menu.tscn"))
 	bottom.add_child(back)
 	var rec := Button.new()
 	rec.text = "推荐配点"

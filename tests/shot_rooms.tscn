@@ -1,6 +1,0 @@
-[gd_scene load_steps=2 format=3 uid="uid://shot-rooms"]
-
-[ext_resource type="Script" path="res://tests/shot_rooms.gd" id="1_rooms"]
-
-[node name="ShotRooms" type="Control"]
-script = ExtResource("1_rooms")

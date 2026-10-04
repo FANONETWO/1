@@ -1,6 +1,0 @@
-[gd_scene load_steps=2 format=3 uid="uid://shot-skill-fx"]
-
-[ext_resource type="Script" path="res://tests/shot_skill_fx.gd" id="1_fx"]
-
-[node name="ShotSkillFx" type="Control"]
-script = ExtResource("1_fx")

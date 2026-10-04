@@ -15,7 +15,7 @@ func _ready() -> void:
 	theme = PixelTheme.build()
 	AudioManager.play_bgm("hub")
 	if Game.player == null:
-		get_tree().change_scene_to_file.call_deferred("res://main_menu.tscn")
+		get_tree().change_scene_to_file.call_deferred("res://ui/main_menu.tscn")
 		return
 	_build()
 	_refresh()
@@ -70,7 +70,7 @@ func _build() -> void:
 	add_child(bottom)
 	var back := Button.new()
 	back.text = "返回标题"
-	back.pressed.connect(func() -> void: get_tree().change_scene_to_file("res://main_menu.tscn"))
+	back.pressed.connect(func() -> void: get_tree().change_scene_to_file("res://ui/main_menu.tscn"))
 	bottom.add_child(back)
 	var blast := Button.new()
 	blast.text = "血统"
@@ -282,7 +282,7 @@ func _confirm_reset() -> void:
 	if has_meta("reset_armed"):
 		remove_meta("reset_armed")
 		Game.new_game()
-		get_tree().change_scene_to_file("res://main_menu.tscn")
+		get_tree().change_scene_to_file("res://ui/main_menu.tscn")
 	else:
 		set_meta("reset_armed", true)
 		_pts_label.text = "奖励点：%d　（再点一次「重置存档」确认）" % Game.points
