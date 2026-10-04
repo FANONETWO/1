@@ -48,10 +48,15 @@ godot --headless --path . res://tests/flow_driver.tscn --quit-after 6000
 3. **如果是美术/场景改动，截一张图**
 
 ```bash
-# 全量回归（26 项）
+# 全量回归（31 项）：推荐直接用运行器 —— 每个测试带时间戳与硬上限，
+# 某个测试卡住会被标成 TIMEOUT 并杀掉，而不是把整批回归拖死
+#   pwsh -File tools/run_tests.ps1              # 全部 31 项
+#   pwsh -File tools/run_tests.ps1 -UnitsOnly   # 只跑 10 项纯逻辑单测
+#   pwsh -File tools/run_tests.ps1 -ScenesOnly  # 只跑 21 项场景/流程测试
+# 下面是不用运行器时的手写等价写法（仅单测部分）：
 for t in dice_test combat_test content_test world_test bloodline_test \
-         bloodline_combat_test bloodline_mitigation_test attr_redesign_test \
-         los_test rooms_test; do
+		 bloodline_combat_test bloodline_mitigation_test attr_redesign_test \
+		 los_test rooms_test; do
   godot --headless --path . -s res://tests/$t.gd
 done
 # 场景类见 README.md 的验证清单
@@ -59,6 +64,12 @@ done
 
 **验收底线：全绿才能提交。** 这个仓库的测试就是我们的回归网 ——
 别人改坏了，测试会立刻告诉你，而不是等玩家发现。
+
+> **新测试的硬性要求**：`_ready()` 的第一行必须调用
+> `TestGuard.arm("xxx_test", 45.0, get_tree())`。
+> 它给每次测试运行一个**墙钟时间戳 + 硬上限**；超时会打印 FAIL 并 `quit(1)`，
+> 即使测试自己卡在某个 `await` 里也能把进程收掉。
+> （教训：一个没有上限的等待循环曾让整批回归永远跑不完，而且因为输出被缓冲，连错在哪都看不到。）
 
 ---
 

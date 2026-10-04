@@ -75,7 +75,14 @@
 | 巡逻 | `godot --headless --path . res://tests/patrol_test.tscn --quit-after 3600` | PASS（会走/会转向/不穿墙/无路线者静止/视野分层） |
 | 副本进度 | `godot --headless --path . res://tests/persist_test.tscn --quit-after 3600` | PASS（击杀与线索跨房间、跨战斗、跨存档不丢） |
 | 逃跑 | `godot --headless --path . res://tests/flee_test.tscn --quit-after 3600` | PASS（逃跑退回上一间不判死；真战败仍结算） |
+| 音频系统 | `godot --headless --path . res://tests/audio_test.tscn` | PASS（19 音效 + 3 BGM 就位、节流、静音、BGM 循环边界有效） |
+| 体验层 | `godot --headless --path . res://tests/ux_test.tscn` | PASS（新手引导、交互半径 2 格、已探索记忆） |
+| 战斗节奏 | `godot --headless --path . res://tests/pace_test.tscn` | PASS（自动打完一场，统计回合数 / 真实耗时 / 玩家出手次数） |
 | 场景独立加载 | main_menu / hub / char_creation | 无脚本错误 |
+
+> **推荐一键跑全部（31 项）**：`pwsh -File tools/run_tests.ps1`
+> 每个测试带**时间戳 + 硬上限**（`tests/test_guard.gd`），挂住的测试会被标 `TIMEOUT`，
+> 不会再把整批回归拖死；详细输出落在 `%TEMP%\loop_tests\`。
 
 > Godot 可执行文件示例：`"D:\steam\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe"`
 
@@ -97,7 +104,8 @@ scenarios/r001_apartment/  map_data（RE2 箱庭地图）/ dialogs / content / s
 ui/        hub.gd（主神空间）、char_creation.gd（建卡）、bloodline_panel.gd（血统页）、pixel_theme.gd
 demo/      demo_scene.gd（独立试炼场：敌人 AI 追击 + 撤离结算）
 tools/     make_tiles.py（程序化生成地板/墙/门）、pixelize.py、leonardo-bot/（AI 生图流水线）
-tests/     27 项自动化测试（单测 10 + 场景流程 17）；另有 shot_*/repro_* 调试截图脚本
+tests/     31 项自动化测试（单测 10 + 场景/流程 21）；另有 shot_*/repro_* 调试截图脚本
+           test_guard.gd 是每个测试的「时间戳 + 硬上限」看门狗；tools/run_tests.ps1 是一键运行器
 ```
 
 > 注：旧的 `world/iso_map.gd`（等距渲染）与 `systems/pathfinding.gd`（BFS）已被
