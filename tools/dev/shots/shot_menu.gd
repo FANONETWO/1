@@ -33,6 +33,12 @@ class Driver:
 			cc._apply_recommended()
 			await get_tree().create_timer(0.4).timeout
 		await _shot("ui_char_creation.png")
+		# 分步向导：逐页截图（属性 / 技能 / 天赋 / 确认）
+		for i in range(1, 5):
+			if cc != null and cc.has_method("_goto_step"):
+				cc._goto_step(i)
+				await get_tree().create_timer(0.5).timeout
+				await _shot("ui_step_%d.png" % (i + 1))
 
 		# 主神空间（团队模式，展示队伍与模式）
 		Game.new_game()

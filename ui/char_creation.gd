@@ -1,39 +1,59 @@
 extends Control
-## 角色创建：姓名 + 九属性购点 + 技能分配 + 天赋选择。
+## 角色创建（分步向导）：01 基础资料 → 02 属性 → 03 技能 → 04 天赋 → 05 确认
+##
+## 为什么分步：一屏塞三栏太挤 —— 九个属性 + 十二个技能 + 五个天赋同屏时，
+## 每行只能压到极限、说明文字只能塞进 tooltip。分步之后每一步都给足留白，
+## 说明也重新回到画面上（悬停才看得到说明，等于没有说明）。
+##
+## ⚠️ 按钮文字不要改：测试与实机脚本按文字找按钮
+##    「返回」「推荐配点」「独狼（奖励 ×1.5）」「四人小队（标准奖励）」「确认，进入主神空间」
 
 const ATTR_POOL := 30
 const SKILL_POOL := 20
 
+# ——— 向导状态 ———
+var _step := 0
+var _steps := [
+	["01", "基础资料", "代号与游戏模式"],
+	["02", "属性", "九属性购点，阶梯价"],
+	["03", "技能", "二十点技能点"],
+	["04", "天赋", "选一个出身"],
+	["05", "确认", "复核并进入主神空间"],
+]
+var _step_pages: Array[Control] = []
+var _step_btns: Array[Button] = []
+var _content_box: AkFrame
+var _step_title: Label
+var _prev_btn: Button
+var _next_btn: Button
+var _summary: RichTextLabel
+
+# ——— 数据 ———
 var _attrs: Dictionary = {}
 var _skills: Dictionary = {}
-var _talent := ""
 var _attr_points_left := ATTR_POOL
 var _skill_points_left := SKILL_POOL
-var _attr_rows: Dictionary = {}   # attr_id -> {val, minus, plus}
-var _skill_rows: Dictionary = {}
+var _talent := ""
+var _mode: StringName = &"solo"
+var _mode_btns: Dictionary = {}
+var _mode_hint: Label
+
+# ——— 控件引用（_refresh 会用到）———
 var _name_edit: LineEdit
+var _hint: Label
+var _confirm: Button
+var _attr_rows: Dictionary = {}    # attr_id -> {val, minus, plus, bar}
+var _skill_rows: Dictionary = {}
 var _attr_summary: Label
 var _skill_summary: Label
 var _talent_summary: Label
-var _confirm: Button
-var _hint: Label                  # 底部状态说明：告诉玩家确认按钮为什么是灰的（E1）
-var _mode: StringName = &"solo"   # 游戏模式：solo / team
-var _mode_btns: Dictionary = {}   # mode -> Button
-var _mode_hint: Label
 
 func _ready() -> void:
 	theme = AkTheme.build()
-	AudioManager.play_bgm("hub")
-	set_anchors_preset(Control.PRESET_FULL_RECT)
-	var bg := ColorRect.new()
-	bg.color = Color(0.03, 0.03, 0.06)
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(bg)
-
-	# 背景：细网格 + 斜向色带（方舟式）
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(AkBackdrop.new())
 
-	# 顶部标题栏：编号 ─ 名称 + 英文标注
+	# 顶栏
 	var head := HBoxContainer.new()
 	head.position = Vector2(60, 14)
 	head.add_theme_constant_override("separation", 12)
@@ -51,263 +71,332 @@ func _ready() -> void:
 
 	var head_rule := ColorRect.new()
 	head_rule.color = AkTheme.LINE
-	head_rule.position = Vector2(60, 48)
+	head_rule.position = Vector2(60, 52)
 	head_rule.size = Vector2(1160, 1)
 	add_child(head_rule)
+
+	# 左侧：步骤列表
+	var side := VBoxContainer.new()
+	side.position = Vector2(60, 78)
+	side.custom_minimum_size = Vector2(250, 0)
+	side.add_theme_constant_override("separation", 6)
+	add_child(side)
+	side.add_child(AkTheme.dim("步骤", AkTheme.FS_SMALL, AkTheme.TEXT_FAINT))
+	for i in _steps.size():
+		var b := Button.new()
+		b.text = "%s　%s" % [_steps[i][0], _steps[i][1]]
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.toggle_mode = true
+		b.custom_minimum_size = Vector2(250, 48)
+		b.add_theme_font_size_override("font_size", AkTheme.FS_BODY)
+		b.pressed.connect(_goto_step.bind(i))
+		side.add_child(b)
+		_step_btns.append(b)
+
+	# 右侧：当前步骤内容（一次只做一件事）
+	_content_box = AkFrame.new()
+	_content_box.position = Vector2(336, 78)
+	_content_box.size = Vector2(884, 500)
+	_content_box.cut = 20.0
+	_content_box.add_theme_constant_override("margin_left", 28)
+	_content_box.add_theme_constant_override("margin_right", 28)
+	_content_box.add_theme_constant_override("margin_top", 22)
+	_content_box.add_theme_constant_override("margin_bottom", 22)
+	add_child(_content_box)
+
+	_build_basic_page()
+	_build_attr_page()
+	_build_skill_page()
+	_build_talent_page()
+	_build_summary_page()
+
+	# 底部：左次要 / 右主行动
+	var bottom := HBoxContainer.new()
+	bottom.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	bottom.offset_left = 60
+	bottom.offset_right = -60
+	bottom.offset_top = -68
+	bottom.offset_bottom = -26
+	bottom.add_theme_constant_override("separation", 10)
+	add_child(bottom)
+
+	var back := Button.new()
+	back.text = "返回"
+	back.custom_minimum_size = Vector2(110, 42)
+	back.pressed.connect(func() -> void:
+		AudioManager.play("ui_click")
+		get_tree().change_scene_to_file("res://ui/main_menu.tscn"))
+	bottom.add_child(back)
+
+	var rec := Button.new()
+	rec.text = "推荐配点"
+	rec.custom_minimum_size = Vector2(130, 42)
+	rec.tooltip_text = "一键填入一套「丧尸副本生存向」的属性/技能/天赋，可直接开打"
+	rec.pressed.connect(func() -> void:
+		AudioManager.play("ui_confirm")
+		_apply_recommended())
+	bottom.add_child(rec)
+
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bottom.add_child(spacer)
+
+	_prev_btn = Button.new()
+	_prev_btn.text = "← 上一步"
+	_prev_btn.custom_minimum_size = Vector2(120, 42)
+	_prev_btn.pressed.connect(func() -> void: _goto_step(_step - 1))
+	bottom.add_child(_prev_btn)
+
+	_next_btn = Button.new()
+	_next_btn.text = "下一步 →"
+	_next_btn.custom_minimum_size = Vector2(120, 42)
+	_next_btn.pressed.connect(func() -> void: _goto_step(_step + 1))
+	bottom.add_child(_next_btn)
+
+	_confirm = Button.new()
+	_confirm.text = "确认，进入主神空间"
+	_confirm.custom_minimum_size = Vector2(260, 42)
+	_confirm.add_theme_color_override("font_color", AkTheme.AMBER)
+	_confirm.pressed.connect(_confirm_create)
+	bottom.add_child(_confirm)
+
+	_hint = Label.new()
+	_hint.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	_hint.offset_left = 60
+	_hint.offset_right = -60
+	_hint.offset_top = -22
+	_hint.offset_bottom = -4
+	_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_hint.add_theme_font_size_override("font_size", 12)
+	add_child(_hint)
+
 	for a in Attrs.ALL:
 		_attrs[a] = 1
 	for s in Skills.ALL:
 		_skills[s] = 0
 
-	# 代号：方舟式「标签 + 输入框」，左对齐（不居中）
-	var name_row := HBoxContainer.new()
-	name_row.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	name_row.offset_left = 60
-	name_row.offset_right = -60
-	name_row.offset_top = 60
-	name_row.add_theme_constant_override("separation", 12)
-	add_child(name_row)
-	var name_lb := AkTheme.dim("代号", AkTheme.FS_SMALL, AkTheme.ACCENT)
-	name_lb.custom_minimum_size = Vector2(52, 0)
-	name_lb.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	name_row.add_child(name_lb)
+	_apply_step()
+	_refresh()
+
+# ——— 向导骨架 ———
+
+func _goto_step(i: int) -> void:
+	var next := clampi(i, 0, _step_pages.size() - 1)
+	if next == _step:
+		return
+	AudioManager.play("ui_click")
+	_step = next
+	_apply_step()
+
+func _apply_step() -> void:
+	for i in _step_pages.size():
+		_step_pages[i].visible = (i == _step)
+	for i in _step_btns.size():
+		var on := (i == _step)
+		_step_btns[i].button_pressed = on
+		_step_btns[i].add_theme_color_override("font_color", AkTheme.AMBER if on else AkTheme.TEXT_DIM)
+	if _step_title != null:
+		# 右上角显示进度（分区标题里已经有「05 ｜ 确认」了，别再重复一遍）
+		_step_title.text = "第 %d / %d 步" % [_step + 1, _step_pages.size()]
+	if _prev_btn != null:
+		_prev_btn.disabled = _step <= 0
+	if _next_btn != null:
+		_next_btn.disabled = _step >= _step_pages.size() - 1
+
+## 造一个空白页（显隐切换，不销毁重建 —— 这样 _refresh 里的控件引用始终有效）
+func _make_page() -> VBoxContainer:
+	var p := VBoxContainer.new()
+	p.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	p.offset_left = 4
+	p.offset_right = -4
+	p.offset_top = 4
+	p.offset_bottom = -4
+	p.add_theme_constant_override("separation", 10)
+	p.visible = false
+	_content_box.add_child(p)
+	_step_pages.append(p)
+	return p
+
+func _hline() -> ColorRect:
+	var r := ColorRect.new()
+	r.color = AkTheme.LINE
+	r.custom_minimum_size = Vector2(0, 1)
+	return r
+
+## 带大数字与说明的分区头：左标题 + 右数值
+func _page_head(index: String, name: String, en: String, right: Label) -> Control:
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 12)
+	head.add_child(AkTheme.section(index, name, en))
+	var sp := Control.new()
+	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(sp)
+	right.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	head.add_child(right)
+	return head
+
+# ——— 01 基础资料 ———
+
+func _build_basic_page() -> void:
+	var p := _make_page()
+
+	var eyebrow := AkTheme.dim("先报个名字 —— 主神只认代号，不认你是谁。", AkTheme.FS_BODY, AkTheme.TEXT_DIM)
+	p.add_child(eyebrow)
+
+	var name_lb := AkTheme.dim("代号（必填）", AkTheme.FS_SMALL, AkTheme.ACCENT)
+	p.add_child(name_lb)
 	_name_edit = LineEdit.new()
-	_name_edit.placeholder_text = "必填 —— 输入你的轮回者代号"
-	_name_edit.tooltip_text = "代号是必填项；没填时下方「确认」按钮不会亮"
-	_name_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_name_edit.placeholder_text = "输入你的轮回者代号"
+	_name_edit.tooltip_text = "必填；没填时下方「确认」按钮不会亮"
+	_name_edit.custom_minimum_size = Vector2(0, 46)
+	_name_edit.add_theme_font_size_override("font_size", 20)
 	_name_edit.text_changed.connect(func(_t): _refresh())
-	name_row.add_child(_name_edit)
+	p.add_child(_name_edit)
 
-	# 三栏：属性 / 技能 / 天赋
-	var cols := HBoxContainer.new()
-	cols.set_anchors_preset(Control.PRESET_FULL_RECT)
-	cols.offset_left = 60
-	cols.offset_right = -60
-	cols.offset_top = 102
-	cols.offset_bottom = -136
-	cols.add_theme_constant_override("separation", 16)
-	add_child(cols)
+	p.add_child(_hline())
+	p.add_child(AkTheme.section("01", "游戏模式", "MODE"))
+	_mode_hint = AkTheme.dim("", AkTheme.FS_BODY, AkTheme.TEXT_DIM)
+	_mode_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	p.add_child(_mode_hint)
 
-	cols.add_child(_build_attr_col())
-	cols.add_child(_build_skill_col())
-	cols.add_child(_build_talent_col())
-
-	# 底部按钮
-	# 底部按钮：左对齐（方舟风），确认键用琥珀色字并靠右
-	var bottom := HBoxContainer.new()
-	bottom.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	bottom.offset_left = 60
-	bottom.offset_right = -60
-	bottom.offset_bottom = -24
-	bottom.offset_top = -66
-	bottom.add_theme_constant_override("separation", 12)
-	add_child(bottom)
-
-	# 游戏模式：独狼（风险溢价 ×1.5）／ 四人小队（带 3 名预设队友，标准奖励）
-	var mode_row := HBoxContainer.new()
-	mode_row.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	mode_row.offset_left = 60
-	mode_row.offset_right = -60
-	mode_row.offset_top = -126
-	mode_row.offset_bottom = -94
-	mode_row.add_theme_constant_override("separation", 12)
-	add_child(mode_row)
-	mode_row.add_child(AkTheme.dim("模式", AkTheme.FS_SMALL, AkTheme.ACCENT))
-	var mode_rule := ColorRect.new()
-	mode_rule.color = AkTheme.LINE
-	mode_rule.custom_minimum_size = Vector2(1, 20)
-	mode_rule.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	mode_row.add_child(mode_rule)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
 	for spec in [[Game.MODE_SOLO, "独狼（奖励 ×1.5）"], [Game.MODE_TEAM, "四人小队（标准奖励）"]]:
 		var mb := Button.new()
 		mb.text = String(spec[1])
 		mb.toggle_mode = true
-		mb.custom_minimum_size = Vector2(216, 34)
+		mb.custom_minimum_size = Vector2(280, 56)
+		mb.add_theme_font_size_override("font_size", AkTheme.FS_BODY)
 		mb.pressed.connect(_set_mode.bind(spec[0]))
-		mode_row.add_child(mb)
+		row.add_child(mb)
 		_mode_btns[spec[0]] = mb
-	_mode_hint = Label.new()
-	_mode_hint.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	_mode_hint.offset_left = 60
-	_mode_hint.offset_right = -60
-	_mode_hint.offset_top = -90
-	_mode_hint.offset_bottom = -72
-	_mode_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	_mode_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_mode_hint.add_theme_font_size_override("font_size", 13)
-	_mode_hint.modulate = Color(1, 1, 1, 0.72)
-	add_child(_mode_hint)
-	var back := Button.new()
-	back.text = "返回"
-	back.custom_minimum_size = Vector2(120, 42)
-	back.pressed.connect(func() -> void:
-		AudioManager.play("ui_click")
-		get_tree().change_scene_to_file("res://ui/main_menu.tscn"))
-	bottom.add_child(back)
-	var rec := Button.new()
-	rec.text = "推荐配点"
-	rec.tooltip_text = "一键填入一套「丧尸副本生存向」的属性/技能/天赋，可直接开打"
-	rec.pressed.connect(func() -> void:
-		AudioManager.play("ui_confirm")
-		_apply_recommended())
-	rec.custom_minimum_size = Vector2(140, 42)
-	bottom.add_child(rec)
-	# 右侧留白，让「确认」这个主行动靠右（方舟的确认键永远在右边）
-	var spacer := Control.new()
-	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	bottom.add_child(spacer)
-	_confirm = Button.new()
-	_confirm.text = "确认，进入主神空间"
-	_confirm.custom_minimum_size = Vector2(280, 42)
-	_confirm.add_theme_color_override("font_color", AkTheme.AMBER)
-	_confirm.pressed.connect(_confirm_create)
-	bottom.add_child(_confirm)
-	_hint = Label.new()
-	_hint.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	_hint.offset_top = -28
-	_hint.offset_bottom = -8
-	_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	_hint.add_theme_font_size_override("font_size", 12)
-	_hint.add_theme_color_override("font_color", AkTheme.OK)
-	add_child(_hint)
+	p.add_child(row)
 
-	_refresh()
+	var tail := AkTheme.dim("模式只影响出战人数与结算倍率，随时可以在主神空间重开新档。",
+		AkTheme.FS_SMALL, AkTheme.TEXT_FAINT)
+	p.add_child(tail)
 
-# ——— 三栏构建 ———
+# ——— 02 属性 ———
 
-func _build_attr_col() -> Control:
-	var panel := AkFrame.new()
-	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	panel.cut = 18.0
-	panel.add_theme_constant_override("margin_left", 18)
-	panel.add_theme_constant_override("margin_right", 18)
-	panel.add_theme_constant_override("margin_top", 16)
-	panel.add_theme_constant_override("margin_bottom", 16)
-	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 2)
-	panel.add_child(v)
-	v.add_child(AkTheme.section("01", "属性", "ATTRIBUTES"))
-	_attr_summary = AkTheme.dim("购点 %d" % ATTR_POOL, AkTheme.FS_SMALL, AkTheme.TEXT_DIM)
-	v.add_child(_attr_summary)
-	var rule := ColorRect.new()
-	rule.color = AkTheme.LINE
-	rule.custom_minimum_size = Vector2(0, 1)
-	v.add_child(rule)
+func _build_attr_page() -> void:
+	var p := _make_page()
+	_attr_summary = AkTheme.dim("剩余 %d 点" % ATTR_POOL, AkTheme.FS_H1, AkTheme.AMBER)
+	p.add_child(_page_head("02", "属性", "ATTRIBUTES", _attr_summary))
+	p.add_child(_hline())
 	for a in Attrs.ALL:
 		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 6)
-		# 属性说明不再挤在行尾 —— 移进 tooltip，界面立刻干净
-		var desc := String(Attrs.DESC.get(a, ""))
+		row.add_theme_constant_override("separation", 12)
+		row.custom_minimum_size = Vector2(0, 44)
 		var lb := Label.new()
-		lb.text = "%s" % Attrs.name_of(a)
-		lb.custom_minimum_size = Vector2(52, 0)
+		lb.text = Attrs.name_of(a)
+		lb.custom_minimum_size = Vector2(66, 0)
 		lb.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		lb.tooltip_text = desc
+		lb.add_theme_font_size_override("font_size", 17)
 		row.add_child(lb)
 		var minus := Button.new()
 		minus.text = "−"
-		minus.custom_minimum_size = Vector2(30, 24)
-		minus.tooltip_text = desc
+		minus.custom_minimum_size = Vector2(34, 30)
 		AkTheme.compact(minus)
 		row.add_child(minus)
 		var val := Label.new()
 		val.text = "1"
-		val.custom_minimum_size = Vector2(26, 0)
+		val.custom_minimum_size = Vector2(34, 0)
 		val.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		val.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		val.add_theme_font_size_override("font_size", 20)
+		val.add_theme_font_size_override("font_size", 24)
 		val.add_theme_color_override("font_color", AkTheme.AMBER)
 		row.add_child(val)
 		var plus := Button.new()
 		plus.text = "+"
-		plus.custom_minimum_size = Vector2(30, 24)
-		plus.tooltip_text = desc
+		plus.custom_minimum_size = Vector2(34, 30)
 		AkTheme.compact(plus)
 		row.add_child(plus)
 		var bar := StatBar.new()
-		bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		bar.custom_minimum_size = Vector2(168, 10)
 		bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		row.add_child(bar)
+		# 说明回到画面上（分步之后有空间了）
+		var desc := AkTheme.dim(String(Attrs.DESC.get(a, "")), AkTheme.FS_SMALL, AkTheme.TEXT_DIM)
+		desc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		desc.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		row.add_child(desc)
 		_attr_rows[a] = {"val": val, "minus": minus, "plus": plus, "bar": bar}
 		minus.pressed.connect(_attr_change.bind(a, -1))
 		plus.pressed.connect(_attr_change.bind(a, 1))
-		v.add_child(row)
-	return panel
+		p.add_child(row)
 
-func _build_skill_col() -> Control:
-	var panel := AkFrame.new()
-	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	panel.cut = 18.0
-	panel.add_theme_constant_override("margin_left", 18)
-	panel.add_theme_constant_override("margin_right", 18)
-	panel.add_theme_constant_override("margin_top", 16)
-	panel.add_theme_constant_override("margin_bottom", 16)
-	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 2)
-	panel.add_child(v)
-	v.add_child(AkTheme.section("02", "技能", "SKILLS"))
-	_skill_summary = AkTheme.dim("点数 %d" % SKILL_POOL, AkTheme.FS_SMALL, AkTheme.TEXT_DIM)
-	v.add_child(_skill_summary)
-	var rule := ColorRect.new()
-	rule.color = AkTheme.LINE
-	rule.custom_minimum_size = Vector2(0, 1)
-	v.add_child(rule)
-	for s in Skills.ALL:
+# ——— 03 技能 ———
+
+func _build_skill_page() -> void:
+	var p := _make_page()
+	_skill_summary = AkTheme.dim("剩余 %d 点" % SKILL_POOL, AkTheme.FS_H1, AkTheme.ACCENT)
+	p.add_child(_page_head("03", "技能", "SKILLS", _skill_summary))
+	p.add_child(_hline())
+
+	var cols := HBoxContainer.new()
+	cols.add_theme_constant_override("separation", 32)
+	cols.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	p.add_child(cols)
+	var left := VBoxContainer.new()
+	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	left.add_theme_constant_override("separation", 4)
+	var right := VBoxContainer.new()
+	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	right.add_theme_constant_override("separation", 4)
+	cols.add_child(left)
+	cols.add_child(right)
+
+	var half := int(ceil(float(Skills.ALL.size()) / 2.0))
+	for i in Skills.ALL.size():
+		# Skills.ALL 的元素是 Variant，不能用 := 推断类型
+		var s: String = String(Skills.ALL[i])
 		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 6)
+		row.add_theme_constant_override("separation", 10)
+		row.custom_minimum_size = Vector2(0, 44)
 		var lb := Label.new()
-		lb.text = "%s" % Skills.name_of(s)
-		lb.custom_minimum_size = Vector2(52, 0)
+		lb.text = Skills.name_of(s)
+		lb.custom_minimum_size = Vector2(62, 0)
 		lb.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		lb.add_theme_font_size_override("font_size", 16)
 		row.add_child(lb)
 		var minus := Button.new()
 		minus.text = "−"
-		minus.custom_minimum_size = Vector2(30, 24)
+		minus.custom_minimum_size = Vector2(34, 30)
 		AkTheme.compact(minus)
 		row.add_child(minus)
 		var val := Label.new()
 		val.text = "0"
-		val.custom_minimum_size = Vector2(26, 0)
+		val.custom_minimum_size = Vector2(32, 0)
 		val.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		val.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		val.add_theme_font_size_override("font_size", 20)
+		val.add_theme_font_size_override("font_size", 22)
 		val.add_theme_color_override("font_color", AkTheme.ACCENT)
 		row.add_child(val)
 		var plus := Button.new()
 		plus.text = "+"
-		plus.custom_minimum_size = Vector2(30, 24)
+		plus.custom_minimum_size = Vector2(34, 30)
 		AkTheme.compact(plus)
 		row.add_child(plus)
 		var bar := StatBar.new()
 		bar.segments = 5
-		bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		bar.custom_minimum_size = Vector2(110, 10)
 		bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		row.add_child(bar)
 		_skill_rows[s] = {"val": val, "minus": minus, "plus": plus, "bar": bar}
 		minus.pressed.connect(_skill_change.bind(s, -1))
 		plus.pressed.connect(_skill_change.bind(s, 1))
-		v.add_child(row)
-	return panel
+		if i < half:
+			left.add_child(row)
+		else:
+			right.add_child(row)
 
-func _build_talent_col() -> Control:
-	var panel := AkFrame.new()
-	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	panel.cut = 18.0
-	panel.add_theme_constant_override("margin_left", 18)
-	panel.add_theme_constant_override("margin_right", 18)
-	panel.add_theme_constant_override("margin_top", 16)
-	panel.add_theme_constant_override("margin_bottom", 16)
-	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 6)
-	panel.add_child(v)
-	v.add_child(AkTheme.section("03", "天赋", "TALENT"))
-	_talent_summary = AkTheme.dim("未选择", AkTheme.FS_SMALL, AkTheme.TEXT_DIM)
-	_talent_summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	v.add_child(_talent_summary)
-	var rule := ColorRect.new()
-	rule.color = AkTheme.LINE
-	rule.custom_minimum_size = Vector2(0, 1)
-	v.add_child(rule)
+# ——— 04 天赋 ———
+
+func _build_talent_page() -> void:
+	var p := _make_page()
+	_talent_summary = AkTheme.dim("未选择", AkTheme.FS_H1, AkTheme.TEXT_DIM)
+	p.add_child(_page_head("04", "天赋", "TALENT", _talent_summary))
+	p.add_child(_hline())
 	for tid in Talents.ALL:
 		var d: Dictionary = Talents.ALL[tid]
 		var b := Button.new()
@@ -315,19 +404,40 @@ func _build_talent_col() -> Control:
 		b.text = "【%s】%s" % [d["name"], d["desc"]]
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		b.custom_minimum_size = Vector2(0, 40)
-		b.add_theme_font_size_override("font_size", AkTheme.FS_SMALL)
+		b.custom_minimum_size = Vector2(0, 62)
+		b.add_theme_font_size_override("font_size", AkTheme.FS_BODY)
 		b.pressed.connect(_on_talent_pressed.bind(String(tid)))
-		v.add_child(b)
-	return panel
+		p.add_child(b)
 
-## 段式数值条（方舟风：用格子而不是连续条；属性 6 段、技能 5 段）
+# ——— 05 确认 ———
+
+func _build_summary_page() -> void:
+	var p := _make_page()
+	_step_title = AkTheme.dim("", AkTheme.FS_H2, AkTheme.TEXT_DIM)
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 12)
+	head.add_child(AkTheme.section("05", "确认", "CONFIRM"))
+	var sp := Control.new()
+	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(sp)
+	head.add_child(_step_title)
+	p.add_child(head)
+	p.add_child(_hline())
+	_summary = RichTextLabel.new()
+	_summary.bbcode_enabled = true
+	_summary.fit_content = true
+	_summary.scroll_active = false
+	_summary.add_theme_font_size_override("normal_font_size", 16)
+	_summary.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	p.add_child(_summary)
+
+# ——— 段式数值条（方舟风：用格子而不是连续条）———
+
 class StatBar extends Control:
 	var value := 1
 	var segments := 6
 
 	func _ready() -> void:
-		custom_minimum_size = Vector2(56, 8)
 		resized.connect(queue_redraw)
 
 	func set_stat(v: int) -> void:
@@ -412,7 +522,8 @@ func _refresh() -> void:
 		else:
 			row["plus"].tooltip_text = "花 %d 点升到 %d（阶梯价）" % [step, v + 1]
 	_attr_summary.text = "剩余 %d 点%s" % [_attr_points_left,
-		"（已无法再分配，可直接确认）" if (_attr_points_left > 0 and not _has_affordable_attr()) else ""]
+		"（已无法再分配）" if (_attr_points_left > 0 and not _has_affordable_attr()) else ""]
+	_attr_summary.add_theme_color_override("font_color", AkTheme.AMBER)
 	for s in _skill_rows:
 		var row: Dictionary = _skill_rows[s]
 		row["val"].text = str(_skills[s])
@@ -430,9 +541,12 @@ func _refresh() -> void:
 			row["plus"].tooltip_text = "花 1 点升到 %d 级" % (lv + 1)
 	_skill_summary.text = "剩余 %d 点" % _skill_points_left
 	if _talent != "":
-		_talent_summary.text = "已选：%s" % String(Talents.get_def(_talent).get("name", _talent))
+		_talent_summary.text = String(Talents.get_def(_talent).get("name", _talent))
+		_talent_summary.add_theme_color_override("font_color", AkTheme.AMBER)
 	else:
 		_talent_summary.text = "未选择"
+		_talent_summary.add_theme_color_override("font_color", AkTheme.TEXT_DIM)
+
 	# 属性购点是**阶梯价**（1→2 花 1 点，2→3 花 2 点…），所以可能剩下买不起任何一级的零头。
 	# 旧条件要求「点数必须花到 0」，于是剩 1 点时所有「+」都灰着、确认按钮也灰着 —— 玩家永久卡死。
 	# E1：这里把「为什么不能确认」直接写成一句话，玩家不用猜。
@@ -455,7 +569,37 @@ func _refresh() -> void:
 			_hint.modulate = Color(1.0, 0.78, 0.42)
 	_confirm.disabled = not blocking.is_empty()
 	_confirm.tooltip_text = "" if blocking.is_empty() else _hint.text
+	if _summary != null:
+		_summary.text = _summary_text()
 	_refresh_mode()
+
+## 05 确认页的汇总文本
+func _summary_text() -> String:
+	var nm := _name_edit.text.strip_edges()
+	var at: Array[String] = []
+	for a in Attrs.ALL:
+		at.append("%s %d" % [Attrs.name_of(a), int(_attrs[a])])
+	var sk: Array[String] = []
+	for s in Skills.ALL:
+		if int(_skills[s]) > 0:
+			sk.append("%s %d" % [Skills.name_of(s), int(_skills[s])])
+	var tn := "（未选）" if _talent == "" else String(Talents.get_def(_talent).get("name", _talent))
+	var mode_txt := "四人小队（标准奖励）" if _mode == Game.MODE_TEAM else "独狼（奖励 ×1.5）"
+	if _mode == Game.MODE_TEAM:
+		var names: Array[String] = []
+		for preset in Allies.PRESETS:
+			names.append(String(preset.get("name", "?")))
+		mode_txt += "　队友：" + " / ".join(names)
+	var out: Array[String] = []
+	out.append("[color=#19c8ff]代号[/color]　%s" % ("（还没填）" if nm == "" else nm))
+	out.append("[color=#19c8ff]模式[/color]　%s" % mode_txt)
+	out.append("[color=#19c8ff]天赋[/color]　%s" % tn)
+	out.append("")
+	out.append("[color=#19c8ff]属性[/color]　" + "　".join(at))
+	out.append("[color=#19c8ff]技能[/color]　" + ("、".join(sk) if not sk.is_empty() else "（未分配）"))
+	out.append("")
+	out.append("[color=#5a636b]确认无误后点右下角「确认，进入主神空间」。[/color]")
+	return "\n".join(out)
 
 ## 是否还有买得起的属性提升
 func _has_affordable_attr() -> bool:
@@ -509,6 +653,8 @@ func _apply_recommended() -> void:
 func _set_mode(m: StringName) -> void:
 	_mode = Game.MODE_TEAM if m == Game.MODE_TEAM else Game.MODE_SOLO
 	_refresh_mode()
+	if _summary != null:
+		_summary.text = _summary_text()
 
 func _refresh_mode() -> void:
 	for k in _mode_btns:
