@@ -88,28 +88,41 @@
 
 ## 五、代码结构
 
+按**分层**组织：数据 → 规则 → 世界 → 表现 → 界面。越靠上的层越"纯"
+（`data/` 与 `rules/` 不碰渲染与 UI，可以直接在 `-s` 模式下被单测跑）。
+
 ```
-autoload/  event_bus.gd（信号总线）、game.gd（全局状态+存档 user://save.json）
-defs/      attrs / skills / items / talents / enemies / quests_def / upgrades
-           bloodlines.gd（八系血统 × D→S 五级 × 16 技能池；排斥/协同/融合技/主动技能效果）
-systems/   dice_pool.gd（D10 骰池）、character.gd（角色+血统）、combat.gd（CombatUnit）
-           combat_manager.gd（回合 / AP / AI / 结算）、quests.gd
-world/     grid_world.gd（方格逻辑：12 种地形 / BFS / 移动与攻击范围）
-           renderers/  grid_renderer.gd（渲染接口）、pixel_grid_renderer.gd（像素渲染）、
-                       placeholder_renderer.gd（色块占位）
-worlds/    registry.gd / world_def.gd（五界注册表 + 自动校验）
-combat/    combat_scene.gd（战场 / 指令菜单 / 血统技能 / AP 制）
-           battle_anim.gd（火纹式战斗特写）
-scenarios/r001_apartment/  map_data（RE2 箱庭地图）/ dialogs / content / scenario.gd
-ui/        hub.gd（主神空间）、char_creation.gd（建卡）、bloodline_panel.gd（血统页）、pixel_theme.gd
-demo/      demo_scene.gd（独立试炼场：敌人 AI 追击 + 撤离结算）
-tools/     make_tiles.py（程序化生成地板/墙/门）、pixelize.py、leonardo-bot/（AI 生图流水线）
-tests/     31 项自动化测试（单测 10 + 场景/流程 21）；另有 shot_*/repro_* 调试截图脚本
-           test_guard.gd 是每个测试的「时间戳 + 硬上限」看门狗；tools/run_tests.ps1 是一键运行器
+autoload/   全局单例：event_bus（信号总线）、game（唯一状态源 + 存档 user://save.json）、
+            debug_log（结构化操作日志）、audio_manager（音效池 / BGM / 静音）
+data/       纯数据表：attrs / skills / items / talents / enemies / quests_def / upgrades
+            bloodlines.gd（十系血统 × D→S 五级 × 四层节点；排斥/协同/融合技/主动技能）
+rules/      规则逻辑（不碰 UI 与渲染）：dice_pool（D10 骰池）、character（角色 + 血统）、
+            combat（CombatUnit）、combat_manager（回合 / AP / AI / 结算）、quests
+world/      地图与世界：grid_world（方格逻辑：12 种地形 / BFS / 移动与攻击范围）、
+            pathfinding（探索与战斗共用寻路）、registry + world_def（世界注册表 + 自动校验）、
+            renderers/（grid_renderer 接口、pixel_grid_renderer 像素渲染、placeholder_renderer 色块占位）
+battle/     战斗表现层：battle_scene（回合制 overlay：立绘 / 演出 / 指令菜单）、battle_anim（火纹式特写）
+ui/         界面与入口：main_menu（入口场景）、hub（主神空间）、char_creation（建卡）、
+            character_panel（角色检视）、bloodline_panel（血统页）、pixel_theme（统一主题）
+scenarios/r001_apartment/  副本实现：rooms（12 箱庭数据）、map_data、scenario（探索控制器）、
+            content（开场 / 结局文案）、dialogs（对话树）
+assets/     tiles/ sprites/ backgrounds/ icons/ audio/（音频由 tools/audio/gen_audio.py 程序化生成）
+tests/      31 项自动化测试（单测 10 + 场景/流程 21）+ test_guard.gd（时间戳与硬上限看门狗）
+tools/      run_tests.ps1（一键回归）、pixelart/（tile/装饰/立绘生成）、audio/（音效合成）、
+            leonardo-bot/（AI 生图流水线）、dev/（开发用：shots 截图、repro 复现、demo 试炼场）、
+            playtest/（脚本化试玩 + 截图）
+legacy/     退休代码归档（旧战斗场景 / 未接线的控制器 / 旧 tile 脚本）—— 见 legacy/README.md
+docs/       策划 / 剧情 / 系统 / 试玩报告 / 交接指南 / 文档状态总览
 ```
 
-> 注：旧的 `world/iso_map.gd`（等距渲染）与 `systems/pathfinding.gd`（BFS）已被
-> `GridWorld` 完全取代，已于本次梳理中删除。
+> **分层纪律**：`data/` 只放数据、`rules/` 只放逻辑、`world/` 只放地图与世界、
+> 只有 `battle/` 与 `ui/` 碰画面。想验证这条边界：`data/` 与 `rules/` 下的脚本
+> 能直接在 `-s` 模式跑（没有 autoload、没有渲染也能测）。
+>
+> 历史沿革：`world/iso_map.gd`（等距渲染）已被 `GridWorld` 取代并删除；
+> `systems/pathfinding.gd` 迁入 `world/pathfinding.gd`（它和 `grid_world` 是配套的）；
+> 残留的孤儿 `.uid` 一并清理。
+
 
 ## 六、规则出处（参考规则书，已解压至 D:\1\rules_ref\）
 
@@ -130,12 +143,12 @@ tests/     31 项自动化测试（单测 10 + 场景/流程 21）；另有 shot
 ### 7.1 架构分层：逻辑与渲染解耦
 
 ```
-worlds/                       世界注册表（五界数据 + 自动校验）
-  registry.gd                   Worlds.all() / get_world(id) / validate_all()
-  world_def.gd                  世界定义：阶段/任务/结算/机制，含地图布点校验
-world/
+world/                        地图与世界（逻辑 + 渲染器 + 世界注册表）
   grid_world.gd                 方格逻辑层（视角无关）：12 种地形、BFS 寻路、
                                 Dijkstra 移动范围、攻击范围、地图校验
+  pathfinding.gd                探索与战斗共用的寻路（Pathfind.find）
+  registry.gd                   世界注册表：Worlds.all() / get_world(id) / validate_all()
+  world_def.gd                  世界定义：阶段/任务/结算/机制，含地图布点校验
   renderers/
     grid_renderer.gd            渲染器接口（只读逻辑层，绝不参与规则计算）
     placeholder_renderer.gd     色块占位（素材未就位也能完整跑通）
@@ -146,8 +159,8 @@ world/
 
 ### 7.2 像素可玩切片
 
-**完整流程已像素化**：探索场景（`scenario.tscn`）与战斗场景（`combat_scene.tscn`）都已从等距 `IsoMap`
-切换到 `GridWorld + PixelGridRenderer`。实现方式是渲染器提供一层「IsoMap 兼容接口」
+**完整流程已像素化**：探索场景（`scenarios/r001_apartment/scenario.tscn`）与战斗 overlay
+（`battle/battle_scene.gd`）都已从等距 `IsoMap` 切换到 `GridWorld + PixelGridRenderer`。实现方式是渲染器提供一层「IsoMap 兼容接口」
 （`grid_to_world` / `grid_at_point` / `is_walkable` / `set_highlight` / `set_path` …），
 因此旧场景代码**只改了构造地图的三行**，其余逻辑与全部端到端测试零改动。
 
@@ -156,9 +169,9 @@ world/
 # 战斗中点击敌人，即播放火纹式战斗特写（冲刺 / 命中闪光 / 伤害数字 / 血条下降）
 godot --path .
 
-# demo/demo_scene.tscn 仍有价值：它是「敌人 AI 追击 + 探索拾取 + 撤离结算」的独立试炼场，
+# tools/dev/demo/demo_scene.tscn 仍有价值：它是「敌人 AI 追击 + 探索拾取 + 撤离结算」的独立试炼场，
 # 保留给开发调试（已不再占用主菜单入口，避免与主流程重复）
-godot --path . res://demo/demo_scene.tscn
+godot --path . res://tools/dev/demo/demo_scene.tscn
 ```
 
 | 操作 | 效果 |

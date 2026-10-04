@@ -216,7 +216,7 @@ Get-ChildItem "assets\raw\playtest" | Get-FileHash -Algorithm SHA256 |
 $godot = "<Godot 可执行文件>"
 # ★ 不要加 --headless（截图会全黑）
 # ★ --quit-after 单位是帧，跑完整流程要给足（60fps 下 300000 ≈ 83 分钟）
-& $godot --path . res://tests/real_playthrough.tscn --quit-after 300000
+& $godot --path . res://tools/playtest/real_playthrough.tscn --quit-after 300000
 ```
 
 **动工前先杀掉可能占着窗口的旧进程**：

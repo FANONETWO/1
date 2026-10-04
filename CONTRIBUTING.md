@@ -132,11 +132,11 @@ art(tiles): 重绘地砖与砖墙，平铺无缝
 
 | 方向 | 写入范围 | 说明 |
 |---|---|---|
-| **战斗** | `combat/` `systems/combat*.gd` | 回合制、技能、血统战斗效果 |
+| **战斗** | `battle/` `rules/combat*.gd` | 回合制、技能、血统战斗效果 |
 | **探索/箱庭** | `scenarios/r001_apartment/` | 房间数据、交互、剧情钩子 |
 | **UI** | `ui/` | 主菜单、建卡、主神空间、角色面板 |
 | **美术** | `assets/` `tools/pixelart/` | tile、立绘、装饰、音效 |
-| **数值/内容** | `defs/` `content.gd` | 属性、技能、敌人、物品、线索 |
+| **数值/内容** | `data/` `content.gd` | 属性、技能、敌人、物品、线索 |
 | **测试** | `tests/` | 每人负责自己模块的测试 |
 
 **冲突最少的做法：先开 issue 说清"我要动哪个目录"，再开工。**
@@ -147,10 +147,10 @@ art(tiles): 重绘地砖与砖墙，平铺无缝
 
 ```bash
 # 逐房间截图（快，用内部跳转）
-godot --path . res://tests/shot_rooms.tscn --quit-after 4800
+godot --path . res://tools/dev/shots/shot_rooms.tscn --quit-after 4800
 
 # 真实输入全流程试玩（从主菜单一路点到通关，零内部跳转）
-godot --path . res://tests/real_playthrough.tscn --quit-after 300000
+godot --path . res://tools/playtest/real_playthrough.tscn --quit-after 300000
 ```
 
 > 截图脚本**不要加 `--headless`**，否则截出来全黑。
